@@ -1,0 +1,393 @@
+---
+title: "dietWGCNA"
+author: "Dani Blumstein"
+date: "7/15/2022"
+output: html_document
+---
+
+---
+title: "test"
+author: "Dani Blumstein"
+date: "2023-08-15"
+output: html_document
+---
+```{r}
+#BiocManager::install("impute")
+library(tidyr)
+library(dplyr)
+library(ggbeeswarm)
+library(lme4)
+library(lmerTest)
+#library(edgeR)
+library(WGCNA)
+library(cluster)
+library(flashClust)
+library(devtools)
+library(Biobase)
+library(preprocessCore)
+library(gprofiler2)
+library(doParallel)
+library(readr)
+```
+
+
+```{r}
+setwd("/Users/danielleblumstein/Documents/UNH/rnaseq/diet_final")
+countdata<-read.table(file = "data/gene.level.count.data.tsv", header = TRUE)
+samples<- read.csv("results/samplespreadsheet.csv")
+annos <- read.csv("/Users/danielleblumstein/Documents/UNH/rnaseq/diet_final/data/annos.txt")
+annos$ensid =  mapIds(org.Hs.eg.db,
+                    keys=annos$gene, 
+                    column="ENSEMBL",
+                    keytype="SYMBOL",
+                    multiVals="first")
+
+
+
+hyp_countdata <- dplyr::select(countdata, contains("hyp"))
+hyp_samples <-samples %>% filter(tissue == "hyp") 
+hyp_samples$trt <- as.factor(hyp_samples$trt)
+hyp_samples$sex <- as.factor(hyp_samples$sex)
+
+hyp_dds_trt <- DESeqDataSetFromMatrix(countData = hyp_countdata,
+                                       colData = hyp_samples,
+                                       design = ~ trt + sex)
+
+
+#filter out genes where there are less than 8 samples with normalized counts greater than or equal to 10.
+hyp_dds_trt <- estimateSizeFactors(hyp_dds_trt)
+idx <- rowSums(counts(hyp_dds_trt, normalized=TRUE) >= 10 ) >= 8
+
+hyp_dds_trt <- hyp_dds_trt[idx,]
+#print(paste("Number of genes after filtering by total expression:", nrow(hyp_dds_trt)))
+matrix <- as.data.frame(counts(hyp_dds_trt))
+
+#hyp_dds_trt$trt_combo <- factor(paste0(hyp_dds_trt$trt, hyp_dds_trt$sex))
+#design(hyp_dds_trt) <- ~ pro_weight + trt_combo
+
+hyp_dds_trt <- DESeq(hyp_dds_trt,test="Wald")
+annos$ensembl <- as.character(annos$ensid)
+
+#rename transcript rows to ensid names
+#rownames(hyp_dds_trt)=annos$ensid[match(names(hyp_dds_trt),annos$gene)]
+#remove the NAs (those transcripts dont have a ensid name)
+#hyp_dds_trt <- hyp_dds_trt[complete.cases(rownames(hyp_dds_trt)), ]
+hyp_dds_trt <- hyp_dds_trt[!rownames(hyp_dds_trt) == "NULL", ] 
+
+hyp_dds_trt <- estimateSizeFactors(hyp_dds_trt)
+normalized_counts <- vst(hyp_dds_trt, blind = FALSE)
+hyp_Expr <- assay(normalized_counts)
+```
+## now you have normalized read counts - yay!
+
+
+```{r}
+##################  WGCNA  ##########################
+
+#code to subset just DE genes
+#hyp_master <- read.csv("results/DE_hyp/trt_genes.csv", header = TRUE)
+#hypref <- hyp_master$Gene
+#hyp_Expr <- subset(normalized_counts, subset = rownames(normalized_counts) %in% hypref)
+
+#Remove gene information and transpose the expression data
+rownames(hyp_Expr)<-NULL
+hyp_Expr <- t(hyp_Expr)
+
+##########check included genes#########
+gsg = goodSamplesGenes(hyp_Expr, verbose = 3);
+gsg$allOK
+```
+
+```{r}
+# Trait data generation ---------------------------------------------------
+# Now we read in the phenotypic trait data
+hyp_samples <- as.data.frame(hyp_samples)
+dim(hyp_samples)
+traitData_hyp <- 'row.names<-'(hyp_samples, hyp_samples$sample)
+traitData_hyp$trt <- as.numeric(as.factor(traitData_hyp$trt))
+traitData_hyp$sex <- as.numeric(as.factor(traitData_hyp$sex))
+
+# Choose columns of trait dataset to be used in downstream analyses
+colnames(traitData_hyp)
+traitData_hyp <- traitData_hyp %>% dplyr::select(c('sex','weight',"Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb.","TCO2","iCa","trt","mean_RQ","mean_EE","mean_H2Omg"))
+traitData_hyp <- as.data.frame(lapply(traitData_hyp, as.numeric))
+```
+
+```{r}
+#### filter samples ########
+A_hyp=adjacency(t(hyp_Expr),type="distance")
+# this calculates the whole network connectivity
+k_hyp=as.numeric(apply(A_hyp,2,sum))-1
+# standardized connectivity
+Z.k_hyp=scale(k_hyp)
+
+# Designate samples as outlying
+# if their Z.k value is below the threshold
+thresholdZ.k=-4 # often -2.5
+
+# the color vector indicates outlyingness (red)
+outlierColor_hyp <- ifelse(Z.k_hyp<thresholdZ.k,"red","black")
+
+library(flashClust)
+# calculate the cluster tree using flashClust or hclust
+sampleTree_hyp <- flashClust(as.dist(1-A_hyp), method = "average")
+# Convert traits to a color representation:
+# where red indicates high values
+
+
+traitColors = data.frame(numbers2colors(traitData_hyp,signed=FALSE))
+dimnames(traitColors)[[2]] = paste(names(traitData_hyp))
+datColors = data.frame(outlier = outlierColor_hyp,traitColors)
+plotDendroAndColors(sampleTree_hyp,groupLabels=names(datColors),
+                    colors=datColors,main="Sample Dendrogram and Trait Heatmap")
+```
+
+
+```{r}
+############ Choosing the soft threshold beta via scale free topology
+# Choose a set of soft thresholding powers
+powers=c(1:30) # in practice this should include powers up to 20.
+# choose power based on sft_JZ criterion
+sft_hyp=pickSoftThreshold(hyp_Expr,powerVector=powers, networkType = "signed")
+# Plot the results:
+
+par(mfrow=c(1,2))
+# sft_hyp index as a function of different powers
+plot(sft_hyp$fitIndices[,1],-sign(sft_hyp$fitIndices[,3])*sft_hyp$fitIndices[,2],
+     xlab="Soft Threshold (power)",ylab="sft_hyp, unsigned R^2",type="n",main=paste("Scale independence"))
+text(sft_hyp$fitIndices[,1],-sign(sft_hyp$fitIndices[,3])*sft_hyp$fitIndices[,2],
+     labels=powers,col="red", pch=1, cex=.50)
+# this line corresponds to using an R^2 cut-off of h
+abline(h=0.85,col="red")
+# Mean connectivity as a function of different powers
+plot(sft_hyp$fitIndices[,1],sft_hyp$fitIndices[,5],type="n",
+     xlab="Soft Threshold (power)",ylab="Mean Connectivity",main=paste("Mean connectivity"))
+text(sft_hyp$fitIndices[,1],sft_hyp$fitIndices[,5],labels=powers,col="red", cex=.50)
+
+```
+
+```{r}
+###########Automatic module detection via dynamic cutting
+dim(hyp_Expr)
+
+
+merhypngThresh = 0.25
+net_hyp = blockwiseModules(hyp_Expr,corType="pearson",
+                          maxBlockSize=14000,networkType="signed hybrid",power=16,minModuleSize=20,
+                          mergeCutHeight=merhypngThresh,numericLabels=F,saveTOMs=TRUE,
+                          pamRespectsDendro=FALSE,saveTOMFileBase="hyp_TEST")
+
+```
+
+```{r}
+moduleLabelsAutomatic_hyp=net_hyp$colors
+
+# Convert labels to colors for plotting
+moduleColorsAutomatic_hyp = labels2colors(moduleLabelsAutomatic_hyp)
+
+# A data frame with module eigengenes can be obtained as follows
+MEsAutomatic_hyp=net_hyp$MEs
+
+#this is proportional weight loss
+water = as.data.frame(traitData_hyp$mean_H2Omg)
+names(water)="water"
+
+GS.hyp=as.numeric(cor(hyp_Expr,traitData_hyp,use="p"))
+# This translates the numeric values into colors
+GS.hypWColor_hyp=numbers2colors(GS.hyp,signed=T)
+
+blocknumber=1
+datColors_hyp=data.frame(moduleColorsAutomatic_hyp,GS.hypWColor_hyp)[net_hyp$blockGenes[[blocknumber]],]
+
+# Plot the dendrogram and the module colors underneath
+plotDendroAndColors(net_hyp$dendrograms[[blocknumber]],colors=datColors_hyp,
+                    groupLabels=c("Module colors"),dendroLabels=FALSE,
+                    hang=0.03,addGuide=TRUE,guideHang=0.05)
+
+# Choose a module assignment
+moduleColors_hyp=moduleColorsAutomatic_hyp
+
+# Define numbers of genes and samples
+nGeneshyp = ncol(hyp_Expr)
+nSampleshyp = nrow(hyp_Expr)
+
+# Recalculate MEs with color labels
+MEs0hyp = moduleEigengenes(hyp_Expr,moduleColors_hyp)$eigengenes
+
+MEs_hyp = orderMEs(MEs0hyp)
+modTraitCor_hyp = cor(MEs_hyp, traitData_hyp, use = "p")
+modTraitP_hyp = corPvalueStudent(modTraitCor_hyp, nSampleshyp)
+
+#Since we have a moderately large number of modules and traits,
+#a suitable graphical representation will help in reading
+#the table. We color code each association by the correlation value:
+# Will display correlations and their p-values
+textMatrix_hyp = paste(signif(modTraitCor_hyp, 2), "\n(",
+                      signif(modTraitP_hyp, 1), ")", sep = "")
+dim(textMatrix_hyp) = dim(modTraitCor_hyp)
+par(mar = c(6, 8.5, 3, 3))
+
+# Display the correlation values within a heatmap plot
+labeledHeatmap(Matrix = modTraitCor_hyp, xLabels = names(traitData_hyp),
+               yLabels = names(MEs_hyp), ySymbols = names(MEs_hyp), 
+               colorLabels =FALSE,colors=blueWhiteRed(50),textMatrix=textMatrix_hyp,
+               setStdMarhypns = FALSE, cex.text = 0.4, zlim = c(-1,1),
+               main = paste("Module-trait relationships, hyp"))
+png("figures/hyp_WGCNA_heatmap.png", width = 9.5, height = 12, units = "in", res = 300)
+```
+
+
+```{r}
+############################write tables w/ corr info###################################################################
+modNames_hyp = substring(names(MEs_hyp), 3)
+geneModuleMembership_hyp = as.data.frame(cor(hyp_Expr, MEs_hyp, use = "p"));
+MMPvalue_hyp = as.data.frame(corPvalueStudent(as.matrix(geneModuleMembership_hyp), nSampleshyp));
+names(geneModuleMembership_hyp) = paste("MM", modNames_hyp, sep="");
+names(MMPvalue_hyp) = paste("p.MM", modNames_hyp, sep="");
+geneTraitSignificance_hyp = as.data.frame(cor(hyp_Expr, water, use = "p"));
+GSPvalue_hyp = as.data.frame(corPvalueStudent(as.matrix(geneTraitSignificance_hyp), nSampleshyp));
+names(geneTraitSignificance_hyp) = paste("GS.", names(water), sep="");
+names(GSPvalue_hyp) = paste("p.GS.", names(water), sep="");
+
+All_module_correlations_hyp <- subset(signif(modTraitP_hyp, 1))
+W_module_correlations_hyp <- All_module_correlations_hyp[,1]
+W_module_adjusted_correlations_hyp <- p.adjust(W_module_correlations_hyp, method = "fdr")
+
+# (aka. module eigengene based connectivity kME):
+datKME_hyp=signedKME(hyp_Expr, MEs_hyp)
+melt(datKME_hyp)
+
+
+Module_eigengenes_hyp <- net_hyp$MEs
+rownames(MEs_hyp) <- rownames(hyp_Expr)
+write.csv(MEs_hyp, file="results/WGCNAresults/ALLSAMPLES_hyp_MEs_signed.csv")
+write.csv(modTraitP_hyp, file="results/WGCNAresults/ALLSAMPLES_hyp_MEs_P_Pearson.csv")
+```
+
+```{r}
+############ hyp models ##############
+library(lme4)
+library(lmerTest)
+
+traitData_hyp <- hyp_samples
+traitData_hyp <- 'row.names<-'(hyp_samples, hyp_samples$Animal_ID)
+traitData_hyp$trt <- as.numeric(as.factor(traitData_hyp$trt))
+traitData_hyp$sex <- as.numeric(as.factor(traitData_hyp$sex))
+
+# Choose columns of trait dataset to be used in downstream analyses
+colnames(traitData_hyp)
+traitData_hyp <- traitData_hyp %>% select(c('sex','weight',"Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb.","TCO2","iCa","trt","mean_RQ","mean_EE","mean_H2Omg"))
+
+MEs_hyp<- read.csv("results/WGCNAresults/ALLSAMPLES_hyp_MEs_signed.csv", header = TRUE)
+MEs_hyp$X <-  sub("X*", "", MEs_hyp$X)
+
+pheno_ME_hyp <- merge(MEs_hyp, traitData_hyp, by.x = "X", by.y = "trt")
+```
+
+
+```{r}
+##################################write MM and GS values to file for each gene
+# Create the starting data frame
+
+genes_hyp <- assay(normalized_counts)
+geneInfo0_hyp = data.frame(Gene = genes_hyp,
+                          moduleColor = moduleColors_hyp,
+                          geneTraitSignificance_hyp,
+                          GSPvalue_hyp)
+# Order modules by their significance for weight
+MEs_hyp2 <- MEs_hyp[,-1]
+modOrder = order(-abs(cor(MEs_hyp2, water, use = "p")));
+# Add module membership information in the chosen order
+for (mod in 1:ncol(geneModuleMembership_hyp))
+{
+  oldNames = names(geneInfo0_hyp)
+  geneInfo0_hyp = data.frame(geneInfo0_hyp, geneModuleMembership_hyp[,modOrder[mod]],
+                            MMPvalue_hyp[, modOrder[mod]]);
+  names(geneInfo0_hyp) = c(oldNames, paste("MM.", modNames_hyp[modOrder[mod]], sep=""),
+                          paste("p.MM.", modNames_hyp[modOrder[mod]], sep=""))
+}
+
+#geneInfo0_hyp$ensembl <- rownames(geneInfo0_hyp)
+#geneInfo0_hyp <- merge(geneInfo0_hyp, annos, by.x = "ensembl", by.y = "ensembl")
+geneInfo0_hyp$ensid <- NULL
+
+write.csv(geneInfo0_hyp, file="results/WGCNAresults/ALLSAMPLES_hyp_wgcna_gene_module_membership_pearson_signed.csv")
+```
+
+
+GO
+```{r}
+modTraitP_hyp_long <- reshape2::melt(modTraitP_hyp,measure.vars = c('sex','weight',"Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb.","TCO2","iCa","trt","mean_RQ","mean_EE","mean_H2Omg"))
+
+modTraitP_hyp_long_sig <- filter(modTraitP_hyp_long, value<0.05)
+for ( col in 1:ncol(modTraitP_hyp_long_sig)){
+    modTraitP_hyp_long_sig$Var1 <-  sub("ME*", "", modTraitP_hyp_long_sig$Var1)
+}
+
+modTraitP_hyp_wide_sig <- modTraitP_hyp_long_sig %>% pivot_wider(names_from = Var2, values_from = value)
+
+genes_mods <- as.data.frame(cbind(rownames(geneInfo0_hyp),geneInfo0_hyp$moduleColor))
+genes_mods_filtered <- filter(genes_mods,
+                       V2 %in% modTraitP_hyp_wide_sig$Var1)
+
+genes_mods_filtered <- genes_mods_filtered %>% rename(gene = V1,color = V2)
+modTraitP_hyp_long_sig <- modTraitP_hyp_long_sig %>% rename(color = Var1,pheno = Var2,pval = value)
+
+combo <- list(genes_mods_filtered,modTraitP_hyp_long_sig)
+combo <- combo %>% reduce(full_join, by="color")
+combo_hyp <- combo
+
+looping <- unique(combo$color)
+hyp_list<-list()
+
+for (i in looping) {
+subset <- filter(combo, color==i)
+phenos <- c(unique(as.character(subset$pheno)))
+  for (p in phenos) 
+  {
+    subset2 <- filter(subset, pheno==p)
+    gostres_i <-gost(query = subset2$gene, 
+                organism = "hsapiens", ordered_query = FALSE, 
+                multi_query = FALSE, significant = T, exclude_iea = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = FALSE, 
+                user_threshold = 0.05, correction_method = "g_SCS", 
+                domain_scope = "annotated", custom_bg = NULL, 
+                numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
+    
+    go_i <- as.data.frame(cbind(gostres_i$result$term_id,gostres_i$result$term_name, gostres_i$result$term_size,gostres_i$result$p_value))
+    if(!is.data.frame(go_i) || !nrow(go_i)) next
+    go_i <- top_n(go_i, 20, V4)
+    #go_i <- go_i %>% rename(!! paste0(p):=V3)
+    go_i$pheno <- p
+    go_i$mod <- i
+  }
+if(!is.data.frame(go_i) || !nrow(go_i)) next
+go_i <-select(go_i, -V4)
+hyp_list[[i]]<-go_i
+}
+
+
+big_data_hyp = do.call(rbind, hyp_list)
+#big_data_hyp$tissue <- "hyp"
+
+go_wgcna_hyp <- hyp_list %>% reduce(full_join, by=c("V1","V2"))
+library(openxlsx)
+write.xlsx(setNames(as.list(lapply(hyp_list, data.frame)), names(hyp_list)), file="hyp_list.xlsx")
+
+```
+
+unique(geneInfo0_hyp$moduleColor)
+
+subset <- filter(combo, color=="darkgreen")
+phenos <- c(unique(as.character(subset$pheno)))
+subset2 <- filter(subset, pheno=="Glu")
+
+wgcna <- subset2$gene
+hyp_dds_trt1 <- subset(hyp_dds_trt, rownames(hyp_dds_trt) %in% wgcna)
+restrt <- results(hyp_dds_trt1, alpha = 0.01, contrast = c("trt", "yes", "no"))
+pdata <- as.data.frame(restrt)
+
+p2 <- ggplot(pdata, aes(log2FoldChange, -log10(padj))) +
+  geom_point()+
+  ylim(0,0.4)
+p2

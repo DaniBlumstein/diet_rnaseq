@@ -1,0 +1,391 @@
+---
+title: "dietWGCNA"
+author: "Dani Blumstein"
+date: "7/15/2022"
+output: html_document
+---
+
+---
+title: "test"
+author: "Dani Blumstein"
+date: "2023-08-15"
+output: html_document
+---
+```{r}
+#BiocManager::install("impute")
+library(tidyr)
+library(dplyr)
+library(ggbeeswarm)
+library(lme4)
+library(lmerTest)
+#library(edgeR)
+library(WGCNA)
+library(cluster)
+library(flashClust)
+library(devtools)
+library(Biobase)
+library(preprocessCore)
+library(gprofiler2)
+library(doParallel)
+library(readr)
+```
+
+
+```{r}
+setwd("/Users/danielleblumstein/Documents/UNH/rnaseq/diet_final")
+countdata<-read.table(file = "data/gene.level.count.data.tsv", header = TRUE)
+samples<- read.csv("results/samplespreadsheet.csv")
+annos <- read.csv("/Users/danielleblumstein/Documents/UNH/rnaseq/diet_final/data/annos.txt")
+annos$ensid =  mapIds(org.Hs.eg.db,
+                    keys=annos$gene, 
+                    column="ENSEMBL",
+                    keytype="SYMBOL",
+                    multiVals="first")
+
+
+
+gi_countdata <- dplyr::select(countdata, contains("gi"))
+gi_samples <-samples %>% filter(tissue == "gi") 
+gi_samples$trt <- as.factor(gi_samples$trt)
+gi_samples$sex <- as.factor(gi_samples$sex)
+
+gi_dds_trt <- DESeqDataSetFromMatrix(countData = gi_countdata,
+                                       colData = gi_samples,
+                                       design = ~ trt + sex)
+
+
+#filter out genes where there are less than 8 samples with normalized counts greater than or equal to 10.
+gi_dds_trt <- estimateSizeFactors(gi_dds_trt)
+idx <- rowSums(counts(gi_dds_trt, normalized=TRUE) >= 10 ) >= 8
+
+gi_dds_trt <- gi_dds_trt[idx,]
+#print(paste("Number of genes after filtering by total expression:", nrow(gi_dds_trt)))
+matrix <- as.data.frame(counts(gi_dds_trt))
+
+#gi_dds_trt$trt_combo <- factor(paste0(gi_dds_trt$trt, gi_dds_trt$sex))
+#design(gi_dds_trt) <- ~ pro_weight + trt_combo
+
+gi_dds_trt <- DESeq(gi_dds_trt,test="Wald")
+annos$ensembl <- as.character(annos$ensid)
+
+#rename transcript rows to ensid names
+#rownames(gi_dds_trt)=annos$ensid[match(names(gi_dds_trt),annos$gene)]
+#remove the NAs (those transcripts dont have a ensid name)
+#gi_dds_trt <- gi_dds_trt[complete.cases(rownames(gi_dds_trt)), ]
+gi_dds_trt <- gi_dds_trt[!rownames(gi_dds_trt) == "NULL", ] 
+
+gi_dds_trt <- estimateSizeFactors(gi_dds_trt)
+normalized_counts <- vst(gi_dds_trt, blind = FALSE)
+gi_Expr <- assay(normalized_counts)
+```
+## now you have normalized read counts - yay!
+
+
+```{r}
+##################  WGCNA  ##########################
+
+#code to subset just DE genes
+#gi_master <- read.csv("results/DE_gi/trt_genes.csv", header = TRUE)
+#giref <- gi_master$Gene
+#gi_Expr <- subset(normalized_counts, subset = rownames(normalized_counts) %in% giref)
+
+#Remove gene information and transpose the expression data
+rownames(gi_Expr)<-NULL
+gi_Expr <- t(gi_Expr)
+
+##########check included genes#########
+gsg = goodSamplesGenes(gi_Expr, verbose = 3);
+gsg$allOK
+```
+
+```{r}
+# Trait data generation ---------------------------------------------------
+# Now we read in the phenotypic trait data
+gi_samples <- as.data.frame(gi_samples)
+dim(gi_samples)
+traitData_gi <- 'row.names<-'(gi_samples, gi_samples$sample)
+traitData_gi$trt <- as.numeric(as.factor(traitData_gi$trt))
+traitData_gi$sex <- as.numeric(as.factor(traitData_gi$sex))
+
+# Choose columns of trait dataset to be used in downstream analyses
+colnames(traitData_gi)
+traitData_gi <- traitData_gi %>% dplyr::select(c('sex','weight',"Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb.","TCO2","iCa","trt","mean_RQ","mean_EE","mean_H2Omg"))
+traitData_gi <- as.data.frame(lapply(traitData_gi, as.numeric))
+```
+
+```{r}
+#### filter samples ########
+A_gi=adjacency(t(gi_Expr),type="distance")
+# this calculates the whole network connectivity
+k_gi=as.numeric(apply(A_gi,2,sum))-1
+# standardized connectivity
+Z.k_gi=scale(k_gi)
+
+# Designate samples as outlying
+# if their Z.k value is below the threshold
+thresholdZ.k=-4 # often -2.5
+
+# the color vector indicates outlyingness (red)
+outlierColor_gi <- ifelse(Z.k_gi<thresholdZ.k,"red","black")
+
+library(flashClust)
+# calculate the cluster tree using flashClust or hclust
+sampleTree_gi <- flashClust(as.dist(1-A_gi), method = "average")
+# Convert traits to a color representation:
+# where red indicates high values
+
+
+traitColors = data.frame(numbers2colors(traitData_gi,signed=FALSE))
+dimnames(traitColors)[[2]] = paste(names(traitData_gi))
+datColors = data.frame(outlier = outlierColor_gi,traitColors)
+plotDendroAndColors(sampleTree_gi,groupLabels=names(datColors),
+                    colors=datColors,main="Sample Dendrogram and Trait Heatmap")
+```
+
+
+```{r}
+############ Choosing the soft threshold beta via scale free topology
+# Choose a set of soft thresholding powers
+powers=c(1:30) # in practice this should include powers up to 20.
+# choose power based on sft_JZ criterion
+sft_gi=pickSoftThreshold(gi_Expr,powerVector=powers, networkType = "signed")
+# Plot the results:
+
+par(mfrow=c(1,2))
+# sft_gi index as a function of different powers
+plot(sft_gi$fitIndices[,1],-sign(sft_gi$fitIndices[,3])*sft_gi$fitIndices[,2],
+     xlab="Soft Threshold (power)",ylab="sft_gi, unsigned R^2",type="n",main=paste("Scale independence"))
+text(sft_gi$fitIndices[,1],-sign(sft_gi$fitIndices[,3])*sft_gi$fitIndices[,2],
+     labels=powers,col="red", pch=1, cex=.50)
+# this line corresponds to using an R^2 cut-off of h
+abline(h=0.85,col="red")
+# Mean connectivity as a function of different powers
+plot(sft_gi$fitIndices[,1],sft_gi$fitIndices[,5],type="n",
+     xlab="Soft Threshold (power)",ylab="Mean Connectivity",main=paste("Mean connectivity"))
+text(sft_gi$fitIndices[,1],sft_gi$fitIndices[,5],labels=powers,col="red", cex=.50)
+
+```
+
+```{r}
+###########Automatic module detection via dynamic cutting
+dim(gi_Expr)
+
+
+mergingThresh = 0.25
+net_gi = blockwiseModules(gi_Expr,corType="pearson",
+                          maxBlockSize=14000,networkType="signed hybrid",power=16,minModuleSize=20,
+                          mergeCutHeight=mergingThresh,numericLabels=F,saveTOMs=TRUE,
+                          pamRespectsDendro=FALSE,saveTOMFileBase="gi_TEST")
+
+```
+
+```{r}
+moduleLabelsAutomatic_gi=net_gi$colors
+
+# Convert labels to colors for plotting
+moduleColorsAutomatic_gi = labels2colors(moduleLabelsAutomatic_gi)
+
+# A data frame with module eigengenes can be obtained as follows
+MEsAutomatic_gi=net_gi$MEs
+
+#this is proportional weight loss
+water = as.data.frame(traitData_gi$mean_H2Omg)
+names(water)="water"
+
+GS.gi=as.numeric(cor(gi_Expr,traitData_gi,use="p"))
+# This translates the numeric values into colors
+GS.giWColor_gi=numbers2colors(GS.gi,signed=T)
+
+blocknumber=1
+datColors_gi=data.frame(moduleColorsAutomatic_gi,GS.giWColor_gi)[net_gi$blockGenes[[blocknumber]],]
+
+# Plot the dendrogram and the module colors underneath
+plotDendroAndColors(net_gi$dendrograms[[blocknumber]],colors=datColors_gi,
+                    groupLabels=c("Module colors"),dendroLabels=FALSE,
+                    hang=0.03,addGuide=TRUE,guideHang=0.05)
+
+# Choose a module assignment
+moduleColors_gi=moduleColorsAutomatic_gi
+
+# Define numbers of genes and samples
+nGenesgi = ncol(gi_Expr)
+nSamplesgi = nrow(gi_Expr)
+
+# Recalculate MEs with color labels
+MEs0gi = moduleEigengenes(gi_Expr,moduleColors_gi)$eigengenes
+
+MEs_gi = orderMEs(MEs0gi)
+modTraitCor_gi = cor(MEs_gi, traitData_gi, use = "p")
+modTraitP_gi = corPvalueStudent(modTraitCor_gi, nSamplesgi)
+
+#Since we have a moderately large number of modules and traits,
+#a suitable graphical representation will help in reading
+#the table. We color code each association by the correlation value:
+# Will display correlations and their p-values
+textMatrix_gi = paste(signif(modTraitCor_gi, 2), "\n(",
+                      signif(modTraitP_gi, 1), ")", sep = "")
+dim(textMatrix_gi) = dim(modTraitCor_gi)
+par(mar = c(6, 8.5, 3, 3))
+
+# Display the correlation values within a heatmap plot
+labeledHeatmap(Matrix = modTraitCor_gi, xLabels = names(traitData_gi),
+               yLabels = names(MEs_gi), ySymbols = names(MEs_gi), 
+               colorLabels =FALSE,colors=blueWhiteRed(50),textMatrix=textMatrix_gi,
+               setStdMargins = FALSE, cex.text = 0.4, zlim = c(-1,1),
+               main = paste("Module-trait relationships, gi"))
+png("figures/gi_WGCNA_heatmap.png", width = 9.5, height = 12, units = "in", res = 300)
+```
+
+
+```{r}
+############################write tables w/ corr info###################################################################
+modNames_gi = substring(names(MEs_gi), 3)
+geneModuleMembership_gi = as.data.frame(cor(gi_Expr, MEs_gi, use = "p"));
+MMPvalue_gi = as.data.frame(corPvalueStudent(as.matrix(geneModuleMembership_gi), nSamplesgi));
+names(geneModuleMembership_gi) = paste("MM", modNames_gi, sep="");
+names(MMPvalue_gi) = paste("p.MM", modNames_gi, sep="");
+geneTraitSignificance_gi = as.data.frame(cor(gi_Expr, water, use = "p"));
+GSPvalue_gi = as.data.frame(corPvalueStudent(as.matrix(geneTraitSignificance_gi), nSamplesgi));
+names(geneTraitSignificance_gi) = paste("GS.", names(water), sep="");
+names(GSPvalue_gi) = paste("p.GS.", names(water), sep="");
+
+All_module_correlations_gi <- subset(signif(modTraitP_gi, 1))
+W_module_correlations_gi <- All_module_correlations_gi[,1]
+W_module_adjusted_correlations_gi <- p.adjust(W_module_correlations_gi, method = "fdr")
+
+# (aka. module eigengene based connectivity kME):
+datKME_gi=signedKME(gi_Expr, MEs_gi)
+melt(datKME_gi)
+
+
+Module_eigengenes_gi <- net_gi$MEs
+rownames(MEs_gi) <- rownames(gi_Expr)
+write.csv(MEs_gi, file="results/WGCNAresults/ALLSAMPLES_gi_MEs_signed.csv")
+write.csv(modTraitP_gi, file="results/WGCNAresults/ALLSAMPLES_gi_MEs_P_Pearson.csv")
+```
+
+```{r}
+############ gi models ##############
+library(lme4)
+library(lmerTest)
+
+traitData_gi <- gi_samples
+traitData_gi <- 'row.names<-'(gi_samples, gi_samples$Animal_ID)
+traitData_gi$trt <- as.numeric(as.factor(traitData_gi$trt))
+traitData_gi$sex <- as.numeric(as.factor(traitData_gi$sex))
+
+# Choose columns of trait dataset to be used in downstream analyses
+colnames(traitData_gi)
+traitData_gi <- traitData_gi %>% dplyr::select(c('sex','weight',"Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb.","TCO2","iCa","trt","mean_RQ","mean_EE","mean_H2Omg"))
+
+MEs_gi<- read.csv("results/WGCNAresults/ALLSAMPLES_gi_MEs_signed.csv", header = TRUE)
+MEs_gi$X <-  sub("X*", "", MEs_gi$X)
+
+pheno_ME_gi <- merge(MEs_gi, traitData_gi, by.x = "X", by.y = "trt")
+```
+
+
+```{r}
+##################################write MM and GS values to file for each gene
+# Create the starting data frame
+
+genes_gi <- assay(normalized_counts)
+geneInfo0_gi = data.frame(Gene = genes_gi,
+                          moduleColor = moduleColors_gi,
+                          geneTraitSignificance_gi,
+                          GSPvalue_gi)
+# Order modules by their significance for weight
+MEs_gi2 <- MEs_gi[,-1]
+modOrder = order(-abs(cor(MEs_gi2, water, use = "p")));
+# Add module membership information in the chosen order
+for (mod in 1:ncol(geneModuleMembership_gi))
+{
+  oldNames = names(geneInfo0_gi)
+  geneInfo0_gi = data.frame(geneInfo0_gi, geneModuleMembership_gi[,modOrder[mod]],
+                            MMPvalue_gi[, modOrder[mod]]);
+  names(geneInfo0_gi) = c(oldNames, paste("MM.", modNames_gi[modOrder[mod]], sep=""),
+                          paste("p.MM.", modNames_gi[modOrder[mod]], sep=""))
+}
+
+#geneInfo0_gi$ensembl <- rownames(geneInfo0_gi)
+#geneInfo0_gi <- merge(geneInfo0_gi, annos, by.x = "ensembl", by.y = "ensembl")
+geneInfo0_gi$ensid <- NULL
+
+write.csv(geneInfo0_gi, file="results/WGCNAresults/ALLSAMPLES_gi_wgcna_gene_module_membership_pearson_signed.csv")
+```
+
+
+```{r}
+modTraitP_gi_long <- reshape2::melt(modTraitP_gi,measure.vars = c('sex','weight',"Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb.","TCO2","iCa","trt","mean_RQ","mean_EE","mean_H2Omg"))
+
+modTraitP_gi_long_sig <- dplyr::filter(modTraitP_gi_long, value<0.05)
+for ( col in 1:ncol(modTraitP_gi_long_sig)){
+    modTraitP_gi_long_sig$Var1 <-  sub("ME*", "", modTraitP_gi_long_sig$Var1)
+}
+
+modTraitP_gi_wide_sig <- modTraitP_gi_long_sig %>% pivot_wider(names_from = Var2, values_from = value)
+
+genes_mods <- as.data.frame(cbind(rownames(geneInfo0_gi),geneInfo0_gi$moduleColor))
+genes_mods_filtered <- filter(genes_mods,
+                       V2 %in% modTraitP_gi_wide_sig$Var1)
+
+genes_mods_filtered <- genes_mods_filtered %>% dplyr::rename(gene = V1,color = V2)
+modTraitP_gi_long_sig <- modTraitP_gi_long_sig %>% dplyr::rename(color = Var1,pheno = Var2,pval = value)
+
+combo <- list(genes_mods_filtered,modTraitP_gi_long_sig)
+combo <- combo %>% reduce(full_join, by="color")
+combo_gi <- combo
+
+looping <- unique(combo$color)
+gi_list<-list()
+
+for (i in looping) {
+subset <- filter(combo, color==i)
+phenos <- c(unique(as.character(subset$pheno)))
+  for (p in phenos) 
+  {
+    subset2 <- filter(subset, pheno==p)
+    gostres_i <-gost(query = subset2$gene, 
+                organism = "hsapiens", ordered_query = FALSE, 
+                multi_query = FALSE, significant = T, exclude_iea = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = FALSE, 
+                user_threshold = 0.05, correction_method = "g_SCS", 
+                domain_scope = "annotated", custom_bg = NULL, 
+                numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
+    
+    go_i <- as.data.frame(cbind(gostres_i$result$term_id,gostres_i$result$term_name, gostres_i$result$term_size,gostres_i$result$p_value))
+    if(!is.data.frame(go_i) || !nrow(go_i)) next
+    go_i <- top_n(go_i, 20, V4)
+    #go_i <- go_i %>% dplyr::rename(!! paste0(p):=V3)
+    go_i$pheno <- p
+    go_i$mod <- i
+  }
+if(!is.data.frame(go_i) || !nrow(go_i)) next
+go_i <-select(go_i, -V4)
+gi_list[[i]]<-go_i
+}
+
+big_data_gi = do.call(rbind, gi_list)
+#big_data_gi$tissue <- "gi"
+
+#go_wgcna_gi <- gi_list %>% reduce(full_join, by=c("V1","V2"))
+library(openxlsx)
+write.xlsx(setNames(as.list(lapply(gi_list, data.frame)), names(gi_list)), file="gi_list.xlsx")
+
+```
+
+unique(geneInfo0_gi$moduleColor)
+
+subset <- filter(combo, color=="darkgreen")
+phenos <- c(unique(as.character(subset$pheno)))
+subset2 <- filter(subset, pheno=="Glu")
+
+wgcna <- subset2$gene
+gi_dds_trt1 <- subset(gi_dds_trt, rownames(gi_dds_trt) %in% wgcna)
+restrt <- results(gi_dds_trt1, alpha = 0.01, contrast = c("trt", "yes", "no"))
+pdata <- as.data.frame(restrt)
+
+p2 <- ggplot(pdata, aes(log2FoldChange, -log10(padj))) +
+  geom_point()+
+  ylim(0,0.4)
+p2

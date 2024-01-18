@@ -264,7 +264,7 @@ library(pcaExplorer)
 annos$ensembl <-as.character(annos$ensid)
 
 #rename transcript rows to ensid names
-rownames(gi_dds_trt)=annos$ensid[match(names(gi_dds_trt),annos$gene)]
+#rownames(gi_dds_trt)=annos$ensid[match(names(gi_dds_trt),annos$gene)]
 #remove the NAs (those transcripts dont have a ensid name)
 gi_dds_trt <- gi_dds_trt[complete.cases(rownames(gi_dds_trt)), ]
 gi_dds_trt <- gi_dds_trt[!rownames(gi_dds_trt) == "NULL", ] 
@@ -302,6 +302,8 @@ gi_res_trt$symbol <- mcols(gi_res_trt)$symbol
 # how many are "significant"?
 table(ressex[,"padj"] < 0.05)
 summary(ressex)
+
+ressex_gi <-ressex
 ```
 
 best model for downstream things right now
@@ -322,7 +324,7 @@ matrix <- as.data.frame(counts(ddstrt))
 ddstrt <- DESeq(ddstrt, test="Wald")
 
 #rename transcript rows to ensid names
-rownames(ddstrt)=annos$ensid[match(names(ddstrt),annos$gene)]
+#rownames(ddstrt)=annos$ensid[match(names(ddstrt),annos$gene)]s
 #remove the NAs (those transcripts dont have a ensid name)
 ddstrt <- ddstrt[complete.cases(rownames(ddstrt)), ]
 ddstrt <- ddstrt[!rownames(ddstrt) == "NULL", ] 
@@ -339,7 +341,7 @@ table(restrt[,"padj"] < 0.05)
 summary(restrt)
 
 restrt_gi <-restrt
-
+write.csv(restrt_gi, file="results/GOresults/gi/restrt_gi.csv")
 
 vsd <- varianceStabilizingTransformation(ddstrt, blind = FALSE)
 meanSdPlot(assay(vsd))
@@ -362,83 +364,10 @@ pca <- ggplot(pcaData, aes(x = PC1, y = PC2, color = trt, shape = sex, name=name
 ggplotly(pca)
 ```
 
-
-```{r}
-restrt <- gene_ton_fun(restrt,0,ensembl)
-write.csv(restrt, file="results/GOresults/gi/gi_de_GO.csv")
-#gene_ton_fig(restrt,0,ensembl)
-
-anno_df <- data.frame(gene_id = restrt$ensembl, gene_name = restrt$hgnc_symbol)
-vst_macrophage <- varianceStabilizingTransformation(gi_dds_trt)
-
-bg_ids <- rownames(gi_dds_trt)[rowSums(counts(gi_dds_trt)) > 0]
-bg_symbols <- mapIds(org.Hs.eg.db,
-                     keys = bg_ids,
-                     column = "SYMBOL",
-                     keytype = "ENSEMBL",
-                     multiVals = "first")
- 
-# res_enrich object
-#library("AnnotationDbi")
-de_symbols_IFNg_vs_naive <- deseqresult2df(restrt, FDR =0.05)$hgnc_symbol
-
-# res_enrich object ------------------------------------------------------------
- topgoDE_macrophage_IFNg_vs_naive <-
-  pcaExplorer::topGOtable(de_symbols_IFNg_vs_naive,
-                          bg_symbols,
-                          ontology = "BP",
-                          mapping = "org.Hs.eg.db",
-                          geneID = "symbol",
-                          topTablerows = 30)
-
-res_enrich <- shake_topGOtableResult(topgoDE_macrophage_IFNg_vs_naive)
-res_enrich_gi <- get_aggrscores(res_enrich = res_enrich,
-                                        res_de = restrt,
-                                        annotation_obj = anno_df,
-                                        aggrfun = mean)
-
-#GeneTonic(dds = gi_dds_trt,
-#          res_de = restrt,
-#          res_enrich = res_enrich_gi,
-#          annotation_obj = anno_df,
-#          project_id = "myFirstGeneTonic")
-#
-
-#rename transcript rows to ensid names
-rownames(gi_dds_trt)=annos$gene[match(names(gi_dds_trt),annos$ensid)]
-
-gene_list <- c("MFSD2A","F2")
-plist <- c()
-for (i in gene_list) {
-  
-plist[[i]] <- gene_plot(gi_dds_trt,
-          gene = c(i),
-          intgroup = "trt",
-          assay = "counts",
-          annotation_obj = anno_df,
-          plot_type = "boxplot",
-          labels_display = F,
-          normalized = F)
-
-}
-gi_DE_plots <- gridExtra::grid.arrange(grobs = plist, ncol=1)
-
-df <- get_expression_values(dds = gi_dds_trt, gene = "MFSD2A", intgroup = "trt", 
-        assay = "counts")
-
-ggplot(df,aes(x=trt,y=log10(exp_value), color = trt))+
-  geom_boxplot()+
-  geom_jitter()+
-  #ylim(100,6000)+
-  #title("MFSD2A - GI")+
-  theme_minimal()
-
-ggsave("figures/gi/gi_DE_plots.png", plot = gi_DE_plots, width = 8, height = 20)
-```
-
+go trt
 ```{r}
 up_gi <- filter(as.data.frame(restrt), log2FoldChange > 0, padj < 0.05)
-gostres_gi_up <- gost(query = up_gi$hgnc_symbol, 
+gostres_gi_up <- gost(query = rownames(up_gi), 
                 organism = "hsapiens", ordered_query = FALSE, 
                 multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
                 measure_underrepresentation = FALSE, evcodes = FALSE, 
@@ -453,7 +382,42 @@ go_gi_up <- dplyr::filter(go_gi_up, grepl('GO', V1))
 go_gi_up <- top_n(go_gi_up, 20, V4)
 
 down_gi <- filter(as.data.frame(restrt), log2FoldChange < 0, padj < 0.05)
-gostres_gi_down <- gost(query = down_gi$hgnc_symbol, 
+gostres_gi_down <- gost(query = rownames(down_gi), 
+                organism = "hsapiens", ordered_query = FALSE, 
+                multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = FALSE, 
+                user_threshold = 0.05, correction_method = "g_SCS", 
+                domain_scope = "annotated", custom_bg = NULL, 
+                numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
+
+go_gi_down <- as.data.frame(cbind(gostres_gi_down$result$term_id,gostres_gi_down$result$term_name, gostres_gi_down$result$term_size, gostres_gi_down$result$p_value))
+go_gi_down$tissue <- "gi"
+go_gi_down$DE <- "down"
+go_gi_down <- dplyr::filter(go_gi_down, grepl('GO', V1))
+go_gi_down <- top_n(go_gi_down, 20, V4)
+go_gi <- list(go_gi_down,go_gi_up)
+write.xlsx(setNames(as.list(lapply(go_gi, data.frame)), names(go_gi)), file="go_gi_restrt.xlsx")
+go_gi <- go_gi %>% reduce(full_join, by=c("V1","V2"))
+```
+
+```{r}
+up_gi <- filter(as.data.frame(ressex), log2FoldChange > 0, padj < 0.05)
+gostres_gi_up <- gost(query = rownames(up_gi), 
+                organism = "hsapiens", ordered_query = FALSE, 
+                multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = FALSE, 
+                user_threshold = 0.05, correction_method = "g_SCS", 
+                domain_scope = "annotated", custom_bg = NULL, 
+                numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
+
+go_gi_up <- as.data.frame(cbind(gostres_gi_up$result$term_id,gostres_gi_up$result$term_name, gostres_gi_up$result$term_size, gostres_gi_up$result$p_value))
+go_gi_up$tissue <- "gi"
+go_gi_up$DE <- "up"
+go_gi_up <- dplyr::filter(go_gi_up, grepl('GO', V1))
+go_gi_up <- top_n(go_gi_up, 20, V4)
+
+down_gi <- filter(as.data.frame(ressex), log2FoldChange < 0, padj < 0.05)
+gostres_gi_down <- gost(query = rownames(down_gi), 
                 organism = "hsapiens", ordered_query = FALSE, 
                 multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
                 measure_underrepresentation = FALSE, evcodes = FALSE, 
@@ -468,7 +432,9 @@ go_gi_down <- dplyr::filter(go_gi_down, grepl('GO', V1))
 go_gi_down <- top_n(go_gi_down, 20, V4)
 
 go_gi <- list(go_gi_down,go_gi_up)
+write.xlsx(setNames(as.list(lapply(go_gi, data.frame)), names(go_gi)), file="go_gi_resesx.xlsx")
 go_gi <- go_gi %>% reduce(full_join, by=c("V1","V2"))
 ```
+
 
 
