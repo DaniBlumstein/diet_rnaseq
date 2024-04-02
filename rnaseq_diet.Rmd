@@ -20,13 +20,6 @@ remotes::install_github("federicomarini/GeneTonic",
                         dependencies = TRUE, build_vignettes = TRUE)
                         
 ```{r}
-setwd("/Users/danielleblumstein/Documents/UNH/rnaseq/diet_final")
-#call adams fancy functions
-source("adams_fancy_functions.R")
-ensembl = useMart( "ensembl", dataset = "hsapiens_gene_ensembl" )
-```
-
-```{r}
 library("GeneTonic")
 library("macrophage")
 library("org.Hs.eg.db")
@@ -52,6 +45,16 @@ library(readxl)
 library(lubridate)
 library(patchwork)
 library(EnhancedVolcano)
+library(biomaRt)
+
+```
+
+```{r}
+setwd("/Users/danielleblumstein/Documents/UNH/rnaseq/diet_final")
+#call adams fancy functions
+source("adams_fancy_functions.R")
+ensembl = useMart( "ensembl", dataset = "hsapiens_gene_ensembl" )
+
 dir.create("figures")
 dir.create("figures/TalkGeneFigures")
 dir.create("figures4publication")
@@ -59,6 +62,24 @@ dir.create("results")
 dir.create("results/DEresults")
 dir.create("results/GOresults")
 dir.create("results/WGCNAresults")
+```
+
+```{r}
+mappingdata_edit <- read.delim("~/Documents/UNH/rnaseq/mappingdata_edit.txt")
+
+mappingdata_editM <- subset(mappingdata_edit, sex == 'M')
+hist(mappingdata_editM$number.of.reads.mapped)
+
+mappingdata_editF <- subset(mappingdata_edit, sex == 'F')
+hist(mappingdata_editF$number.of.reads.mapped)
+
+t.test(mappingdata_editM$number.of.reads.mapped,mappingdata_editF$number.of.reads.mapped)
+
+mappingdata_editLF <- subset(mappingdata_edit, diet == 'lowfat')
+hist(mappingdata_editLF$number.of.reads.mapped)
+
+mappingdata_editSD <- subset(mappingdata_edit, diet == 'standard')
+hist(mappingdata_editSD$number.of.reads.mapped)
 ```
 
 
@@ -97,53 +118,44 @@ sample$Animal_ID <- unlist(lapply(strsplit(sample$individal, split = "_"),"[[", 
 
 #grabbing the phys data and electro/ weight data. currently comming from diff script but it happens to be in my global enviro. will need to change this 
 
-#cages <- read.csv("~/Documents/UNH/metabolic chamber/diet/cages") 
-#electrolyte_data <- read_excel("data/electrolyte_data.xlsx", na = "NA")
-#col_order <- c("Animal_ID", "StartTime", "VO2", "VCO2", "H2Omg","EE_kJH", "RQ", "weight", "seconds")
-#phys_data <- cages[, col_order]
-#electrolyte_data$Animal_ID <- as.character(electrolyte_data$mouse_ID)
-#
-#
-##splitting out only the phys data between 11:00 and 12:00
-#noon <- period_to_seconds(hms("11:00:00")):period_to_seconds(hms("12:00:00"))
-#phys_data$TimeOfDay <- ifelse(phys_data$seconds %in% noon, "noon", "other")
-#phys_data <- phys_data[phys_data$TimeOfDay == "noon", ]
-#
-#mean_VO2<- setNames(aggregate(phys_data$VO2, list(phys_data$Animal_ID), FUN=mean),c("Animal_ID", "mean_VO2"))
-#
-#mean_VCO2<- setNames(aggregate(phys_data$VCO2, list(phys_data$Animal_ID), FUN=mean),c("Animal_ID", "mean_VCO2"))
-#
-#mean_EE<- setNames(aggregate(phys_data$EE_kJH, list(phys_data$Animal_ID), FUN=mean),c("Animal_ID", "mean_EE"))
-#
-#mean_RQ<- setNames(aggregate(phys_data$RQ, list(phys_data$Animal_ID), FUN=mean),c("Animal_ID", "mean_RQ"))
-#
-#mean_H2Omg<- setNames(aggregate(phys_data$H2Omg, list(phys_data$Animal_ID), FUN=mean),c("Animal_ID", "mean_H2Omg"))
-#
-##merge all data frames together
-#samples_phys<- Reduce(function(x, y) merge(x, y, all=TRUE), list(mean_VO2, mean_VCO2, mean_RQ, mean_H2Omg, mean_EE,sample))
-#
-#samples_phys$Animal_ID <- as.character(samples_phys$Animal_ID)
-#
-#samples <- electrolyte_data %>% right_join(samples_phys)
-#
-#
-##samples <- samples[complete.cases(samples),]
-#samples$...6 <- NULL
-#samples$cage_ID <- NULL
-#samples$experiment <- NULL
-#samples$experiment_date <- NULL
-#samples$cage_ID <- NULL
-#samples$cage_number<- NULL
-#samples$weight2<- NULL
-#samples$weight3<- NULL
-#samples$end_weight<- NULL
-#samples$diet<- NULL
-#samples$mouse_ID<- NULL
+cages <- read.csv("~/Documents/UNH/metabolic chamber/diet/cages") 
+electrolyte_data <- read_excel("data/electrolyte_data.xlsx", na = "NA")
+col_order <- c("Animal_ID", "StartTime", "VO2", "VCO2", "H2Omg","EE_kJH", "RQ", "weight", "seconds")
+phys_data <- cages[, col_order]
+electrolyte_data$Animal_ID <- as.character(electrolyte_data$mouse_ID)
 
-#############do this next!##############
-#correct for multiple hypothesis for all comparisons
-#make a priori hypothesis as specific as i can for all the comparisons?
-samples <- sample
+ggplot(cages, aes(y = VO2, x = seconds, color = experiment))+
+  geom_point()+
+  geom_smooth()+
+  facet_grid(~Sex)
+
+##splitting out only the phys data between 11:00 and 12:00
+noon <- period_to_seconds(hms("11:00:00")):period_to_seconds(hms("12:00:00"))
+phys_data$TimeOfDay <- ifelse(phys_data$seconds %in% noon, "noon", "other")
+phys_data <- phys_data[phys_data$TimeOfDay == "noon", ]
+
+mean_VO2<- setNames(aggregate(phys_data$VO2, list(phys_data$Animal_ID), FUN=mean),c("Animal_ID", "mean_VO2"))
+mean_VCO2<- setNames(aggregate(phys_data$VCO2, list(phys_data$Animal_ID), FUN=mean),c("Animal_ID", "mean_VCO2"))
+mean_EE<- setNames(aggregate(phys_data$EE_kJH, list(phys_data$Animal_ID), FUN=mean),c("Animal_ID", "mean_EE"))
+mean_RQ<- setNames(aggregate(phys_data$RQ, list(phys_data$Animal_ID), FUN=mean),c("Animal_ID", "mean_RQ"))
+mean_H2Omg<- setNames(aggregate(phys_data$H2Omg, list(phys_data$Animal_ID), FUN=mean),c("Animal_ID", "mean_H2Omg"))
+
+##merge all data frames together
+samples_phys<- Reduce(function(x, y) merge(x, y, all=TRUE), list(mean_VO2, mean_VCO2, mean_RQ, mean_H2Omg, mean_EE,sample))
+samples_phys$Animal_ID <- as.character(samples_phys$Animal_ID)
+samples <- electrolyte_data %>% right_join(samples_phys)
+
+samples$...6 <- NULL
+samples$`experiment ` <- NULL
+samples$experiment_date <- NULL
+samples$cage_ID <- NULL
+samples$cage_number<- NULL
+samples$weight2<- NULL
+samples$weight3<- NULL
+samples$end_weight<- NULL
+samples$diet<- NULL
+samples$mouse_ID<- NULL
+
 samples<- samples[!is.na(samples$filename),]
 
 write.csv(samples, "results/samplespreadsheet.csv", row.names = FALSE)
@@ -156,7 +168,7 @@ write.csv(samples, "results/samplespreadsheet.csv", row.names = FALSE)
 #annos <- read_delim("data/annos.txt", delim = "\t", 
 #+     escape_double = FALSE, col_names = FALSE, 
 #+     locale = locale(), trim_ws = TRUE)
-annos <- read_csv("/Users/danielleblumstein/Documents/UNH/rnaseq/diet_final/data/annos.txt")
+annos <- read.csv("data/annos.txt")
 
 library("org.Hs.eg.db")
 annos$ensid = mapIds(org.Hs.eg.db,
@@ -223,10 +235,10 @@ dim(countdata2)
 print(paste("Number of NA after import:", sum(is.na(countdata2))))
 
 countdata2 <- countdata2 %>% 
-    mutate_at(5:215, ~replace_na(.,0))
+    mutate_at(5:193, ~replace_na(.,0))
 
 # combine all counts that map to the same gene
-countdata3 <- aggregate(countdata2[, 5:215], list(countdata2$gene), sum)
+countdata3 <- aggregate(countdata2[, 5:193], list(countdata2$gene), sum)
 dim(countdata3)
 
 countdata3[is.na(countdata3)] <-  0
@@ -246,6 +258,121 @@ write.table(countdata, "data/gene.level.count.data.tsv", row.names = TRUE, sep =
 ```
 
 
+t tests
+```{r}
+weight_F_lowfat <-samples %>% filter(sex == "F") 
+weight_F_lowfat <-weight_F_lowfat %>% filter(trt == "lowfat") 
+weight_F_lowfat = weight_F_lowfat[!duplicated(weight_F_lowfat$Animal_ID),]
+weight_F_standard <-samples %>% filter(sex == "F") 
+weight_F_standard <-weight_F_standard %>% filter(trt == "standard") 
+weight_F_standard = weight_F_standard[!duplicated(weight_F_standard$Animal_ID),]
+t.test(weight_F_standard$weight, weight_F_lowfat$weight)
+
+weight_M_lowfat <-samples %>% filter(sex == "M") 
+weight_M_lowfat <-weight_M_lowfat %>% filter(trt == "lowfat") 
+weight_M_lowfat = weight_M_lowfat[!duplicated(weight_M_lowfat$Animal_ID),]
+weight_M_standard <-samples %>% filter(sex == "M") 
+weight_M_standard <-weight_M_standard %>% filter(trt == "standard") 
+weight_M_standard = weight_M_standard[!duplicated(weight_M_standard$Animal_ID),]
+t.test(weight_M_standard$weight, weight_M_lowfat$weight)
+
+weight_lowfat <-samples %>% filter(trt == "lowfat") 
+weight_lowfat = weight_lowfat[!duplicated(weight_lowfat$Animal_ID),]
+weight_standard <-samples %>% filter(trt == "standard")
+weight_standard = weight_standard[!duplicated(weight_standard$Animal_ID),]
+t.test(weight_lowfat$weight, weight_standard$weight)
+
+weight_F <-samples %>% filter(sex == "F") 
+weight_F = weight_F[!duplicated(weight_F$Animal_ID),]
+weight_M <-samples %>% filter(sex == "M")
+weight_M = weight_M[!duplicated(weight_M$Animal_ID),]
+t.test(weight_F$weight, weight_M$weight)
+
+meanEE_F_lowfat <-samples %>% filter(sex == "F") 
+meanEE_F_lowfat <-meanEE_F_lowfat %>% filter(trt == "lowfat") 
+meanEE_F_lowfat = meanEE_F_lowfat[!duplicated(meanEE_F_lowfat$Animal_ID),]
+meanEE_F_standard <-samples %>% filter(sex == "F") 
+meanEE_F_standard <-meanEE_F_standard %>% filter(trt == "standard") 
+meanEE_F_standard = meanEE_F_standard[!duplicated(meanEE_F_standard$Animal_ID),]
+t.test(meanEE_F_standard$mean_EE, meanEE_F_lowfat$mean_EE)
+
+meanEE_lowfat <-samples %>% filter(trt == "lowfat") 
+meanEE_lowfat = meanEE_lowfat[!duplicated(meanEE_lowfat$Animal_ID),]
+meanEE_standard <-samples %>% filter(trt == "standard") 
+meanEE_standard = meanEE_standard[!duplicated(meanEE_standard$Animal_ID),]
+t.test(meanEE_lowfat$mean_EE, meanEE_standard$mean_EE)
+
+meanEE_F <-samples %>% filter(sex == "F")
+meanEE_F = meanEE_F[!duplicated(meanEE_F$Animal_ID),]
+meanEE_M <-samples %>% filter(sex == "M")
+meanEE_M = meanEE_M[!duplicated(meanEE_M$Animal_ID),]
+t.test(meanEE_F$mean_EE, meanEE_M$mean_EE) 
+
+meanEE_M_lowfat <-samples %>% filter(sex == "M") 
+meanEE_M_lowfat <-meanEE_M_lowfat %>% filter(trt == "lowfat") 
+meanEE_M_lowfat = meanEE_M_lowfat[!duplicated(meanEE_M_lowfat$Animal_ID),]
+meanEE_M_standard <-samples %>% filter(sex == "M") 
+meanEE_M_standard <-meanEE_M_standard %>% filter(trt == "standard") 
+meanEE_M_standard = meanEE_M_standard[!duplicated(meanEE_M_standard$Animal_ID),]
+t.test(meanEE_M_standard$mean_EE, meanEE_M_lowfat$mean_EE)
+
+meanRQ_F_lowfat <-samples %>% filter(sex == "F") 
+meanRQ_F_lowfat <-meanRQ_F_lowfat %>% filter(trt == "lowfat") 
+meanRQ_F_lowfat = meanRQ_F_lowfat[!duplicated(meanRQ_F_lowfat$Animal_ID),]
+meanRQ_F_standard <-samples %>% filter(sex == "F") 
+meanRQ_F_standard = meanRQ_F_standard[!duplicated(meanRQ_F_standard$Animal_ID),]
+meanRQ_F_standard <-meanRQ_F_standard %>% filter(trt == "standard") 
+t.test(meanRQ_F_standard$mean_RQ, meanRQ_F_lowfat$mean_RQ)
+
+meanRQ_M_lowfat <-samples %>% filter(sex == "M") 
+meanRQ_M_lowfat <-meanRQ_M_lowfat %>% filter(trt == "lowfat") 
+meanRQ_M_lowfat = meanRQ_M_lowfat[!duplicated(meanRQ_M_lowfat$Animal_ID),]
+meanRQ_M_standard <-samples %>% filter(sex == "M") 
+meanRQ_M_standard <-meanRQ_M_standard %>% filter(trt == "standard") 
+meanRQ_M_standard = meanRQ_M_standard[!duplicated(meanRQ_M_standard$Animal_ID),]
+t.test(meanRQ_M_standard$mean_RQ, meanRQ_M_lowfat$mean_RQ)
+
+meanRQ_lowfat <-samples %>% filter(trt == "lowfat") 
+meanRQ_lowfat = meanRQ_lowfat[!duplicated(meanRQ_lowfat$Animal_ID),]
+meanRQ_standard <-samples %>% filter(trt == "standard") 
+meanRQ_standard = meanRQ_standard[!duplicated(meanRQ_standard$Animal_ID),]
+t.test(meanRQ_lowfat$mean_RQ, meanRQ_standard$mean_RQ)
+
+meanRQ_F <-samples %>% filter(sex == "F") 
+meanRQ_F = meanRQ_F[!duplicated(meanRQ_F$Animal_ID),]
+meanRQ_M <-samples %>% filter(sex == "M")
+meanRQ_M = meanRQ_M[!duplicated(meanRQ_M$Animal_ID),]
+t.test(meanRQ_F$mean_RQ, meanRQ_M$mean_RQ)
+
+meanH2O_F_lowfat <-samples %>% filter(sex == "F") 
+meanH2O_F_lowfat <-meanH2O_F_lowfat %>% filter(trt == "lowfat") 
+meanH2O_F_lowfat = meanH2O_F_lowfat[!duplicated(meanH2O_F_lowfat$Animal_ID),]
+meanH2O_F_standard <-samples %>% filter(sex == "F") 
+meanH2O_F_standard <-meanH2O_F_standard %>% filter(trt == "standard") 
+meanH2O_F_standard = meanH2O_F_standard[!duplicated(meanH2O_F_standard$Animal_ID),]
+t.test(meanH2O_F_standard$mean_H2Omg, meanH2O_F_lowfat$mean_H2Omg)
+
+meanH2O_M_lowfat <-samples %>% filter(sex == "M") 
+meanH2O_M_lowfat <-meanH2O_M_lowfat %>% filter(trt == "lowfat") 
+meanH2O_M_lowfat = meanH2O_M_lowfat[!duplicated(meanH2O_M_lowfat$Animal_ID),]
+meanH2O_M_standard <-samples %>% filter(sex == "M") 
+meanH2O_M_standard <-meanH2O_M_standard %>% filter(trt == "standard") 
+meanH2O_M_standard = meanH2O_M_standard[!duplicated(meanH2O_M_standard$Animal_ID),]
+t.test(meanH2O_M_standard$mean_H2Omg, meanH2O_M_lowfat$mean_H2Omg)
+
+meanH2Omg_lowfat <-samples %>% filter(trt == "lowfat") 
+meanH2Omg_lowfat = meanH2Omg_lowfat[!duplicated(meanH2Omg_lowfat$Animal_ID),]
+meanH2Omg_standard <-samples %>% filter(trt == "standard") 
+meanH2Omg_standard = meanH2Omg_standard[!duplicated(meanH2Omg_standard$Animal_ID),]
+t.test(meanH2Omg_lowfat$mean_H2Omg, meanH2Omg_standard$mean_H2Omg)
+
+meanH2Omg_F <-samples %>% filter(sex == "F") 
+meanH2Omg_F = meanH2Omg_F[!duplicated(meanH2Omg_F$Animal_ID),]
+meanH2Omg_M <-samples %>% filter(sex == "M")
+meanH2Omg_M = meanH2Omg_M[!duplicated(meanH2Omg_M$Animal_ID),]
+t.test(meanH2Omg_F$mean_H2Omg, meanH2Omg_M$mean_H2Omg)
+```
+
 ### DESeq data creation 
 
 ```{r DESEQ creation}
@@ -256,6 +383,35 @@ countdata <- countdata+1
 dds <- DESeqDataSetFromMatrix(countData = countdata,
                                        colData = samples,
                                        design = ~ sex + tissue + trt)
+
+
+table(samples['sex'])
+table(samples['tissue'])
+table(samples['trt'])
+
+sum(samples$trt== 'standard' & samples$tissue == "gi")
+sum(samples$trt== 'standard' & samples$tissue == "liv")
+sum(samples$trt== 'standard' & samples$tissue == "lu")
+sum(samples$trt== 'standard' & samples$tissue == "kid")
+sum(samples$trt== 'standard' & samples$tissue == "hyp")
+
+sum(samples$trt== 'lowfat' & samples$tissue == "gi")
+sum(samples$trt== 'lowfat' & samples$tissue == "liv")
+sum(samples$trt== 'lowfat' & samples$tissue == "lu")
+sum(samples$trt== 'lowfat' & samples$tissue == "kid")
+sum(samples$trt== 'lowfat' & samples$tissue == "hyp")
+
+sum(samples$sex== 'M' & samples$tissue == "gi")
+sum(samples$sex== 'M' & samples$tissue == "liv")
+sum(samples$sex== 'M' & samples$tissue == "lu")
+sum(samples$sex== 'M' & samples$tissue == "kid")
+sum(samples$sex== 'M' & samples$tissue == "hyp")
+
+sum(samples$sex== 'F' & samples$tissue == "gi")
+sum(samples$sex== 'F' & samples$tissue == "liv")
+sum(samples$sex== 'F' & samples$tissue == "lu")
+sum(samples$sex== 'F' & samples$tissue == "kid")
+sum(samples$sex== 'F' & samples$tissue == "hyp")
 ```
 
 
@@ -351,18 +507,6 @@ ressex$transcript <- mcols(ressex)$transcript
 table(ressex[,"padj"] < 0.05)
 ```
 
-```{r LRT trt}
-ddstrt <- DESeqDataSetFromMatrix(countData = countdata,
-                                       colData = samples,
-                                       design = ~ sex + tissue + trt)
-# run LRT test
-ddstrt <- DESeq(ddstrt, test="LRT", reduced = ~ sex + tissue)
-restrt <- results(ddstrt,)
-restrt$symbol <- mcols(restrt)$symbol
-# how many are "significant"?
-table(restrt[,"padj"] < 0.05)
-```
-
 ```{r LRT tissue}
 ddstissue <- DESeqDataSetFromMatrix(countData = countdata,
                                        colData = samples,
@@ -375,22 +519,905 @@ restissue$symbol <- mcols(restissue)$symbol
 table(restissue[,"padj"] < 0.05)
 ```
 
-*look for genes expressed in one and not the other can do this in edgeR*
+```{r LRT trt}
+ddstrt <- DESeqDataSetFromMatrix(countData = countdata,
+                                       colData = samples,
+                                       design = ~ sex + tissue + trt)
 
-need a prioi for this function to work
-```{r DE genes by sex, eval = FALSE}
-#SigGeneWrapper(ressex, 0.05, "sex")
+ddstrt <- estimateSizeFactors(ddstrt)
+idx <- rowSums(counts(ddstrt, normalized=TRUE) >= 10 ) >= 8
+
+ddstrt <- ddstrt[idx,]
+print(paste("Number of genes after filtering by total expression:", nrow(ddstrt)))
+
+# run LRT test
+ddstrt <- DESeq(ddstrt, test="LRT", reduced = ~ sex + tissue)
+restrt <- results(ddstrt)
+restrt$symbol <- mcols(restrt)$symbol
+# how many are "significant"?
+table(restrt[,"padj"] < 0.05)
+
+ddstrt <- DESeq(ddstrt,test="Wald")
+annos$ensembl <- as.character(annos$ensid)
+
+#rename transcript rows to ensid names
+rownames(ddstrt)=annos$ensid[match(names(ddstrt),annos$gene)]
+#remove the NAs (those transcripts dont have a ensid name)
+ddstrt <- ddstrt[complete.cases(rownames(ddstrt)), ]
+ddstrt <- ddstrt[!rownames(ddstrt) == "NULL", ] 
+rownames(ddstrt)=annos$gene[match(names(ddstrt),annos$ensid)]
+
+ddstrt <- estimateSizeFactors(ddstrt)
+normalized_counts <- vst(ddstrt, blind = FALSE)
+all_Expr <- assay(normalized_counts)
 ```
 
-```{r DE genes by trt, eval = FALSE}
-#SigGeneWrapper(restrt, 0.05, "trt")
+
+```{r}
+require(GGally)
+library(vegan)
+
+cca_cols <- c("kid_lowfat"="#E3EB94","kid_standard" = "#D0E14E","lu_lowfat"="#94BEBD","lu_standard"="#48918B", "liv_lowfat"="#A9DAAF","liv_standard"="#6EBF75", "hyp_lowfat"="#A47FC7","hyp_standard"="#6327A2", "gi_lowfat" = "#959BB8","gi_standard"="#414D86", "in bound" = "lightgrey" ,"outlier"= "darkgrey")
+
+#genes_for_cca <- read.table("~/Documents/UNH/rnaseq/diet_final/genes_for_cca.csv", quote="\"", comment.char="")
+genes_for_cca <- rownames(countdata)
+all_Expr<- as.data.frame(all_Expr)
+
+#subset_all_Expr <- all_Expr %>% filter(rownames(all_Expr) %in% genes_for_cca$X1)
+
+t_subset_all_Expr <-t(all_Expr)
+samples<-as.data.frame(samples)
+traitData_V2 <- samples %>% dplyr::select(c("trt","weight","mean_RQ","mean_EE","mean_H2Omg","individal","tissue", "sex","Animal_ID"))
+
+#traitData_V2 <- traitData_V2 |>
+ #   mutate(tt = fct_cross(trt, sex, tissue))
+
+traitData_V2$trt <- as.factor(traitData_V2$trt)
+traitData_V2$sex <- as.factor(traitData_V2$sex)
+rownames(traitData_V2) <- traitData_V2$individal
+traitData_V2 <- subset(traitData_V2, select = -individal)
+traitData_V2$tissue <- as.factor(traitData_V2$tissue)
+traitData_V2$Animal_ID <- as.factor(traitData_V2$Animal_ID)
+
+#ggpairs(traitData_V2)
+
+cca_model <- cca(t_subset_all_Expr ~ trt+weight+mean_RQ+mean_EE+mean_H2Omg +sex +tissue,data = traitData_V2)
+
+#anova the model to find the significance of the terms
+#anova(cca_model)
+#anova(cca_model,by="terms")
+#anova(cca_model,by="axis")
+#anova(cca_model, by = "margin")
+
+#Get CCA scores
+df_species  <- data.frame(summary(cca_model)$species[,1:2])# get the genes CC1 and CC2 scores
+
+sd <- sd(df_species$CCA1)
+out_ind1 <- df_species %>% filter(CCA1 > sd*2)
+out_ind2 <- df_species %>% filter(CCA1 < -(sd*2))
+
+sd <- sd(df_species$CCA2)
+out_ind3 <- df_species %>% filter(CCA2 > sd*3)
+out_ind4 <- df_species %>% filter(CCA2 < -(sd*3))
+
+#put the 3sd (99% confidence) from the genes are in a GO analysis
+out <- distinct(rbind(out_ind1,out_ind2,out_ind3,out_ind4))
+
+write.table(out, "results/cca_outliers.csv", row.names = TRUE, sep = "\t")
+out$color <- "outlier"
+
+norm <- df_species[!(row.names(df_species) %in% rownames(out)),]
+norm$color <- "in bound"
+
+graphing_data <- as.data.frame(rbind(norm,out))
+
+df_sites  <- data.frame(summary(cca_model)$sites[,1:2])# get the indivisuals CC1 and CC2 scores
+df_environ  <- data.frame(scores(summary(cca_model)$biplot[c(2,3,4),1:2])) #get the physio vars CC1 and CC2 scores
+
+df_tissue  <- scores(summary(cca_model)$centroids[5:9,1:2]) #get the tissue centriod vars CC1 and CC2 scores
+
+
+rc <- function (u) paste0(u[c(3,4)], collapse = "_")
+#make col names just the tissue, sex, trt
+df_sites$lable <- unlist(lapply(strsplit(rownames(df_sites), split = "_"),rc))
+
+CCA1_varex<-round(summary(cca_model)$cont$importance[2,1]*100,2) #Get percentage of variance explained by first axis
+CCA2_varex<-round(summary(cca_model)$cont$importance[2,2]*100,2) #Get percentage of variance explained by second axis
+
+#Set a scaling variable to multiply the CCA values, in order to get a very similar plot to the the one generated by plot(cca_model). You can adjust it according to your data
+scaling_factor <- 2
+library(paletteer)
+
+cca_plot1 <- ggplot(df_species, 
+       aes(x=CCA1, y=CCA2)) + 
+  #Draw lines on x = 0 and y = 0
+  geom_hline(yintercept=0, 
+             linetype="dashed") +
+  geom_vline(xintercept=0, 
+             linetype="dashed") +
+  #coord_fixed()+
+  #Add species text
+    geom_point(data=graphing_data, 
+            aes(x=CCA1,#Score in CCA1 to add species text
+                y=CCA2,#Score in CCA2 to add species text
+                hjust=0.5*(1-sign(CCA1)),#Set the text horizontal alignment according to its position in the CCA plot
+                vjust=0.5*(1-sign(CCA2)),
+                color=factor(color)),#Set the text vertical alignment according to its position in the CCA plot
+            #color = c("grey","#160b39"),
+            size = 1)+
+  #Add sites text
+  geom_point(data=df_sites, 
+            aes(col = df_sites$lable,
+                x=CCA1,#Score in CCA1 to add species text
+                y=CCA2))+#Score in CCA2 to add species text
+  #Add environmental vars arrows
+  geom_segment(data=df_environ, 
+               aes(x=0, #Starting coordinate in CCA1 = 0 
+                   xend=CCA1*scaling_factor,#Ending coordinate in CCA1  
+                   y=0, #Start in CCA2 = 0
+                   yend=CCA2*scaling_factor), #Ending coordinate in CCA2 
+               color="black", #set color
+               arrow=arrow(length=unit(0.01,"npc"))#Set the size of the lines that form the tip of the arrow
+               )+
+  #Add environmental vars text
+  geom_text(data=df_environ, 
+            aes(x=CCA1*scaling_factor, 
+                y=CCA2*scaling_factor,
+                label=rownames(df_environ),
+                hjust=0.5*(1-sign(CCA1)),#Add the text of each environmental var at the end of the arrow
+                vjust=0.5*(1-sign(CCA2))),#Add the text of each environmental var at the end of the arrow 
+            color="black")+
+  #Set bw theme
+  theme+
+  scale_color_manual(values=cca_cols, name = df_sites$lable)+
+  #xlim(-0.8, 0.7)+
+  #ylim(-0.5, 0.7)+
+  #Set x and y axis titles
+  labs(x=paste0("CCA1 (",CCA1_varex," %)"),
+       y=paste0("CCA2 (",CCA2_varex," %)"))+
+  theme(legend.title=element_blank())
+  #theme(legend.position = "none")
+
+cca_plot1
+
+ggsave("cca_plot.png", width = 7, height = 7, dpi = 600)
 ```
 
-```{r DE genes by tissue, eval = FALSE}
-#SigGeneWrapper(restissue, 0.05, "tissue")
+
+```{r}
+go_kid <- go_kid %>% rename(GO = V1,description = V2,kid_up = V3.x,kid_down=V3.y)
+go_kid <- go_kid %>% rename(kid_up_pval = V4.x, kid_down_pval = V4.y)
+go_kid <-select(go_kid, -tissue.x)
+go_kid <-select(go_kid, -tissue.y)
+go_kid <-select(go_kid, -DE.x)
+go_kid <-select(go_kid, -DE.y)
+
+go_gi <- go_gi %>% rename(GO = V1,description = V2,gi_up = V3.x,gi_down=V3.y)
+go_gi <- go_gi %>% rename(gi_up_pval = V4.x, gi_down_pval = V4.y)
+go_gi <-select(go_gi, -tissue.x)
+go_gi <-select(go_gi, -tissue.y)
+go_gi <-select(go_gi, -DE.x)
+go_gi <-select(go_gi, -DE.y)
+
+go_hyp <- go_hyp %>% rename(GO = V1,description = V2,hyp_up = V3.x,hyp_down=V3.y)
+go_hyp <- go_hyp %>% rename(hyp_up_pval = V4.x, hyp_down_pval = V4.y)
+go_hyp <-select(go_hyp, -tissue.x)
+go_hyp <-select(go_hyp, -tissue.y)
+go_hyp <-select(go_hyp, -DE.x)
+go_hyp <-select(go_hyp, -DE.y)
+
+go_liv <- go_liv %>% rename(GO = V1,description = V2,liv_up = V3.x,liv_down=V3.y)
+go_liv <- go_liv %>% rename(liv_up_pval = V4.x, liv_down_pval = V4.y)
+go_liv <-select(go_liv, -tissue.x)
+go_liv <-select(go_liv, -tissue.y)
+go_liv <-select(go_liv, -DE.x)
+go_liv <-select(go_liv, -DE.y)
+
+go_lu <- go_lu %>% rename(GO = V1,description = V2,lu_up = V3.x,lu_down=V3.y)
+go_lu <- go_lu %>% rename(lu_up_pval = V4.x, lu_down_pval = V4.y)
+go_lu <-select(go_lu, -tissue.x)
+go_lu <-select(go_lu, -tissue.y)
+go_lu <-select(go_lu, -DE.x)
+go_lu <-select(go_lu, -DE.y)
+
+
+go_list <- list(go_kid,go_gi,go_hyp,go_liv,go_lu)
+go <- go_list %>% reduce(full_join, by=c("GO","description"))
+go <- reshape2::melt(go,measure.vars = c("kid_up", "kid_down","gi_down","hyp_up","hyp_down","liv_up", "liv_down", "lu_up", "lu_down"))
+go <- go %>% rename(count = value, tissue = variable)
+go <- reshape2::melt(go,measure.vars = c("kid_up_pval","kid_down_pval","gi_down_pval","hyp_up_pval","hyp_down_pval","liv_up_pval","liv_down_pval","lu_up_pval","lu_down_pval"))
+go <- go %>% rename(pval = value)
+go<- within(go, tissue<-data.frame(do.call('rbind', strsplit(as.character(tissue), '_', fixed=TRUE))))
+go$pval <- as.numeric(go$pval)
+#go$pval <- round(go$pval ,digit=5)
+go$count <- as.numeric(go$count)
+go_clean <- na.omit(go)
+up_go <- na.omit(filter(go, tissue$X2=="up"))
+down_go <- na.omit(filter(go, tissue$X2=="down"))
+
+theme<-theme(panel.background = element_blank(),panel.border=element_blank(),axis.line = element_line(colour = "black"),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),
+             strip.background=element_blank(),axis.text.x=element_text(colour="black",size=10),axis.text.y=element_text(colour="black",size=10),
+             axis.ticks=element_line(colour="black"),plot.margin=unit(c(1,1,1,1),"line"))
+
+up <-ggplot(up_go, aes(x = tissue$X1, y = description, color = tissue$X1, size = count)) +
+  geom_point()+
+  theme+
+  ggtitle("up regulated")+
+  theme(legend.position = "none")
+
+down <- ggplot(down_go, aes(x = tissue$X1, y = description, color = tissue$X1, size = count)) +
+  geom_point()+
+  theme+
+  ggtitle("down regulated")+
+  theme(legend.position = "none")
+
+up|down
+
+ggsave("DE_GO_sex.png", width = 15, height = 10, dpi = 600)
 ```
 
 
 
-Now I will run these test for each tissue independently. 
+```{r}
+big_data_kid <- dplyr::filter(big_data_kid, grepl('GO', V1))
+big_data_kid$tissue <- "kid"
+rownames(big_data_kid) <- 1:nrow(big_data_kid)
+left_join(big_data_kid, net_res, by = c("V2" = "count"))
+go_wgcna_clean_kid_subset<-big_data_kid[c(1,2,3,4,5,6,8,9,13,17,18,20,23,27,31,34,35,37,38,40,41,43,46,47,49,51,52,53,54,55,57,58,59,60,61,62,62,67,68,72,73,74,77,80,81,82,85,86,87,88,89,91,92,93,95,96,97,98,108,109,110,111,112,113,114,115,116,119,120),]
+
+big_data_liv <- dplyr::filter(big_data_liv, grepl('GO', V1))
+big_data_liv$tissue <- "liv"
+rownames(big_data_liv) <- 1:nrow(big_data_liv)
+left_join(big_data_liv, net_res, by = c("V2" = "count"))
+go_wgcna_clean_liv_subset<-big_data_liv[c(3,4,5,9,10,11,14,15,16,17,18,19,21,28,29,32,33,34,35,36,37,38,39,40,41,42,43,46,50,51,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,75,77,79,80,81,82,83,84,85,86,87),]
+
+big_data_gi <- dplyr::filter(big_data_gi, grepl('GO', V1))
+big_data_gi$tissue <- "gi"
+rownames(big_data_gi) <- 1:nrow(big_data_gi)
+left_join(big_data_gi, net_res, by = c("V2" = "count"))
+go_wgcna_clean_gi_subset<-big_data_gi[c(1,2,3,5,6,7,9,11,12,13,14,15,19,21,22,23,25,27,28,32,33,34,36,37,38,39,40,43,46,48,49,50,51,52,54,55,56,58,59,60,61,62,63,64,65,70,75,76,78,79,80,81,82,83,96,99,107,111,112,113,114,115,117,119,120,121,122,123,124),]
+
+big_data_hyp <- dplyr::filter(big_data_hyp, grepl('GO', V1))
+big_data_hyp$tissue <- "hyp"
+rownames(big_data_hyp) <- 1:nrow(big_data_hyp)
+left_join(big_data_hyp, net_res, by = c("V2" = "count"))
+go_wgcna_clean_hyp_subset<-big_data_hyp[c(1,6,7,8,10,13,14,15,16,17,21,23,24,25,37,45,48,49,50,52,53,56,55,57,59,60, 61,64,66,67,69,76,77,79,83,86,87,89,90,91,92,93,94,95,96,97,98,100,101),]
+
+big_data_lu <- dplyr::filter(big_data_lu, grepl('GO', V1))
+big_data_lu$tissue <- "lu"
+rownames(big_data_lu) <- 1:nrow(big_data_lu)
+left_join(big_data_lu, net_res, by = c("V2" = "count"))
+go_wgcna_clean_lu_subset<-big_data_lu[c(1,2,6,8,9,10,13,14,17,18,19,20,21,23,25,26,29,30,32,34,35,36,38,44,45,47,48,49,53,54,55,57,58,60,61,62,63,64,66,67,68,69,73,81,82,90,91,92,93,94, 96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,112,125,126,127,128,129,131,133,134,137,140,142,143,144,154,146,147,150,151,152,153),]
+
+wgcna_data <- rbind(go_wgcna_clean_lu_subset,go_wgcna_clean_hyp_subset,go_wgcna_clean_gi_subset,go_wgcna_clean_liv_subset,go_wgcna_clean_kid_subset)
+ 
+#left_join(big_data_lu, net_res, by = c("V2" = "count"))
+coul = c(
+              "trt" = "#fdc328",
+              "iCa"="#f79342",
+              "weight"="#e4695e",
+              "Crea"="#c23c81",
+              "mean_RQ"="#920fa3", 
+              "AnGap"="#6c00a8",
+              "mean_H2Omg"="#1fa088", 
+              "Cl" = "#31688e",
+              "BUN"="#886EA0", 
+              "K" = "darkgrey" ,
+              "TCO2"= "#70809c",
+              "Hct"= "plum",
+          "mean_EE"="#4cc26c",
+         "sex"="purple")
+
+cols <- c("kid"="#E3EB94","liv"="#A9DAAF","lu"="#94BEBD", "hyp"="#A47FC7", "gi" = "#959BB8")
+
+#library(igraph)
+links <-data.frame(
+    source=wgcna_data$V2,
+    target=wgcna_data$tissue,
+    importance=wgcna_data$V3,
+    edge = wgcna_data$pheno
+    )
+
+sort(table(c(links$source, links$target)), decreasing = TRUE)
+result <- rle(sort(c(links[,1], links[,2])))
+net_res <- data.frame(dot=result$lengths, count=result$values)
+
+nodes <- dplyr::select(wgcna_data, V2,tissue)
+nodes <- nodes %>%
+  arrange(V2) %>%
+  filter(duplicated(V2) == FALSE)
+
+
+nodes[nrow(nodes) + 1,] = c("lu", "tissue")
+nodes[nrow(nodes) + 1,] = c("liv","tissue")
+nodes[nrow(nodes) + 1,] = c("gi","tissue")
+nodes[nrow(nodes) + 1,] = c("hyp","tissue")
+nodes[nrow(nodes) + 1,] = c("kid","tissue")
+
+my_edge <- na.omit(as.numeric(wgcna_data$V3))
+network <- graph_from_data_frame(d=links, vertices=nodes, directed=F) 
+
+
+E(network)$color <- coul[as.numeric(as.factor(links$edge))]
+E(network)$name <- as.factor(links$edge)
+V(network)$color <- cols[as.numeric(as.factor(V(network)$tissue))]
+
+
+## Function to wrap long strings
+# Source: http://stackoverflow.com/a/7367534/496488
+wrap_strings <- function(vector_of_strings,width){
+  as.character(sapply(vector_of_strings, FUN=function(x){
+                        paste(strwrap(x, width=width), collapse="\n")
+                        }))
+  }
+
+# Apply the function to wrap the node labels
+V(network)$name = wrap_strings(V(network)$name, 12)
+network <- simplify(network, remove.multiple = F, remove.loops = T) 
+network <- set_graph_attr(network, "layout", layout_with_kk(network))
+
+library(qgraph)
+e <- get.edgelist(network,names=FALSE)
+l <- qgraph.layout.fruchtermanreingold(e,vcount=vcount(network),area=6*(vcount(network)^2),repulse.rad=(vcount(network)^3.1))
+
+png("net.png", 4600, 3600,res= 1000)
+par(mar=c(0,0,0,0))
+plot(network,
+    vertex.label.color="black",
+    vertex.frame.color="transparent",
+    vertex.size=log2(my_edge),
+    vertex.label.cex = .2, 
+    #vertex.label.dist = -1,
+    edge.width=1,
+    layout=l)
+    
+legend("bottomleft", legend=levels(as.factor(E(network)$name)), col = coul , bty = "n", pch=20 , pt.cex = .3, cex = .3, text.col="black" , horiz = FALSE, inset = c(0.1, 0.1))
+
+dev.off()
+
+```
+
+
+```{r}
+rownames(out)
+library(gprofiler2)
+#library(gProfileR)
+
+gostres <- gost(query = rownames(out), 
+                organism = "hsapiens", ordered_query = FALSE, 
+                multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = FALSE, 
+                user_threshold = 0.05, correction_method = "g_SCS", 
+                domain_scope = "annotated", custom_bg = NULL, 
+                numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
+
+gostplot(gostres, capped = TRUE, interactive = TRUE)
+
+
+
+```
+
+res_diet
+```{r}
+#restrt_lu
+#restrt_liv
+#restrt_gi
+#restrt_hyp
+#restrt_kid
+library(RColorBrewer)
+
+summary(restrt_kid)
+summary(restrt_hyp)
+summary(restrt_gi)
+summary(restrt_liv)
+summary(restrt_lu)
+
+
+kid_lfc <- as.data.frame(cbind(rownames(restrt_kid),restrt_kid$padj, restrt_kid$log2FoldChange))
+kid_lfc <- kid_lfc %>% rename(ensembl = V1,padj_kid = V2,log2FoldChange_kid = V3)
+sig_kid_lfc <- as.data.frame(subset(restrt_kid, padj < 0.05))
+kid_lfc$ensembl <- as.factor(kid_lfc$ensembl)
+
+hyp_lfc <- as.data.frame(cbind(rownames(restrt_hyp),restrt_hyp$padj, restrt_hyp$log2FoldChange))
+hyp_lfc <- hyp_lfc %>% rename(ensembl = V1,padj_hyp = V2,log2FoldChange_hyp = V3)
+sig_hyp_lfc <- as.data.frame(subset(restrt_hyp, padj < 0.05))
+hyp_lfc$ensembl <- as.factor(hyp_lfc$ensembl)
+
+gi_lfc <- as.data.frame(cbind(rownames(restrt_gi),restrt_gi$padj, restrt_gi$log2FoldChange))
+gi_lfc <- gi_lfc %>% rename(ensembl = V1,padj_gi = V2,log2FoldChange_gi = V3)
+sig_gi_lfc <- as.data.frame(subset(restrt_gi, padj < 0.05))
+gi_lfc$ensembl <- as.factor(gi_lfc$ensembl)
+
+liv_lfc <- as.data.frame(cbind(rownames(restrt_liv),restrt_liv$padj, restrt_liv$log2FoldChange))
+liv_lfc <- liv_lfc %>% rename(ensembl = V1,padj_liv = V2,log2FoldChange_liv = V3)
+sig_liv_lfc <- as.data.frame(subset(restrt_liv, padj < 0.05))
+liv_lfc$ensembl <- as.factor(liv_lfc$ensembl)
+
+
+lu_lfc <- as.data.frame(cbind(rownames(restrt_lu),restrt_lu$padj, restrt_lu$log2FoldChange))
+lu_lfc <- lu_lfc %>% rename(ensembl = V1,padj_lu = V2,log2FoldChange_lu = V3)
+sig_lu_lfc <- as.data.frame(subset(restrt_lu, padj < 0.05))
+lu_lfc$ensembl <- as.factor(lu_lfc$ensembl)
+
+
+annos$ensembl<-annos$gene
+
+lfc_merge1 <- merge(kid_lfc, hyp_lfc, by = "ensembl",all= TRUE)
+lfc_merge2 <- merge(lfc_merge1,gi_lfc,by = "ensembl",all = TRUE)
+lfc_merge3 <- merge(lfc_merge2,liv_lfc,by = "ensembl",all = TRUE)
+lfc_merge4 <- merge(lfc_merge3,lu_lfc,by = "ensembl",all= TRUE)
+lfc_merge <- merge(lfc_merge4,annos,by = "ensembl",all = TRUE)
+lfc_merge$ensid <- NULL
+lfc_merge$ensembl <- NULL
+lfc_merge$transcript <- NULL
+lfc_merge$Gene <- NULL
+#lfc_merge <- lfc_merge %>% distinct(gene, .keep_all = TRUE)
+#rownames(lfc_merge) <- lfc_merge$gene
+
+
+data_FC <- as.data.frame(cbind(lfc_merge$gene,lfc_merge$log2FoldChange_kid,lfc_merge$log2FoldChange_hyp, lfc_merge$log2FoldChange_gi, lfc_merge$log2FoldChange_liv, lfc_merge$log2FoldChange_lu))
+
+data_FC <- data_FC %>% rename(gene = V1,kid = V2,hyp = V3,gi=V4,liv=V5, lu=V6)
+data_file <- reshape2::melt(data_FC,measure.vars = c("kid", "hyp", "gi","liv","lu"))
+
+data_Pval<- as.data.frame(cbind(lfc_merge$gene,lfc_merge$padj_kid,lfc_merge$padj_hyp, lfc_merge$padj_gi, lfc_merge$padj_liv, lfc_merge$padj_lu))
+
+data_Pval <- data_Pval %>% rename(gene = V1,kid = V2,hyp = V3,gi=V4,liv=V5, lu=V6)
+data_Pval <- reshape2::melt(data_Pval,measure.vars = c("kid", "hyp", "gi","liv","lu"))
+data_file$pval <- as.numeric(data_Pval$value)
+data_file$value <- as.numeric(data_file$value)
+
+data_file= data_file[!apply(data_file[,2:3] == 0, 1, FUN = any, na.rm = TRUE),]
+#rownames(data_file) <- NULL
+
+data_file$labels=round(data_file$value,3)
+
+theme<-theme(panel.background = element_blank(),panel.border=element_blank(),axis.line = element_line(colour = "black"),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),
+             strip.background=element_blank(),axis.text.x=element_text(colour="black",size=16),axis.text.y=element_text(colour="black",size=16),
+             axis.ticks=element_line(colour="black"),plot.margin=unit(c(1,1,1,1),"line"))
+
+
+grey= unique(subset(data_file,data_file$pval>=0.05)[c("variable", "labels","gene")])
+color= unique(subset(data_file,data_file$pval<0.05)[c("variable", "labels","gene")])
+grey$direction[grey$labels<0]="down"
+grey$direction[grey$labels>=0]="up"
+
+color$direction[color$labels<0]="down"
+color$direction[color$labels>=0]="up"
+
+cbPalette = c("darkgrey"="darkgrey","down"="#721f81","up"="#fd9668")
+
+vol_plot1 <- ggplot(data = grey, aes(x = labels, y = variable)) +
+  geom_jitter(data = grey , aes(color = "darkgrey"),size = 1.25,height = 0.3) +
+  geom_jitter(data = color,aes(x = labels, y = variable, color=direction), size = 1.3,height = 0.3) +
+  scale_color_manual(values = cbPalette, labels = c("nonsignificant",'down','up'),name = 'direction') +
+  scale_x_continuous(breaks = pretty(data_file$value, n = 10)) +  labs(title= "", x= "\nLog2FC", y= "") + 
+  #coord_cartesian(xlim = c(-7, 5)) +
+  theme(
+    axis.title.x = element_text( size=16 ),
+    axis.title.y = element_text(size=16),
+    legend.text = element_text(size=16),
+    legend.title = element_text(size=16)) +
+  ggtitle("standard vs lowfat")+
+  #geom_text_repel(aes(label = gene), hjust=0, vjust=0,size=3,parse=TRUE)+
+  theme 
+vol_plot1
+ggsave("vol_plot_diet.png", width = 10, height = 10, dpi = 600)
+```
+
+```{r}
+summary(ressex_kid_lf)
+summary(ressex_hyp_lf)
+summary(ressex_gi_lf)
+summary(ressex_liv_lf)
+summary(ressex_lu_lf)
+
+
+kid_lfc <- as.data.frame(cbind(rownames(ressex_kid_lf),ressex_kid_lf$padj, ressex_kid_lf$log2FoldChange))
+kid_lfc <- kid_lfc %>% rename(ensembl = V1,padj_kid = V2,log2FoldChange_kid = V3)
+kid_lfc$ensembl <- as.factor(kid_lfc$ensembl)
+
+hyp_lfc <- as.data.frame(cbind(rownames(ressex_hyp_lf),ressex_hyp_lf$padj, ressex_hyp_lf$log2FoldChange))
+hyp_lfc <- hyp_lfc %>% rename(ensembl = V1,padj_hyp = V2,log2FoldChange_hyp = V3)
+hyp_lfc$ensembl <- as.factor(hyp_lfc$ensembl)
+
+gi_lfc <- as.data.frame(ressex_gi_lf)
+gi_lfc <- gi_lfc %>% rename(padj_gi = padj,log2FoldChange_gi = log2FoldChange)
+gi_lfc <- tibble::rownames_to_column(gi_lfc, "ensembl")
+gi_lfc$ensembl <- as.factor(gi_lfc$ensembl)
+
+liv_lfc <- as.data.frame(cbind(rownames(ressex_liv_lf),ressex_liv_lf$padj, ressex_liv_lf$log2FoldChange))
+liv_lfc <- liv_lfc %>% rename(ensembl = V1,padj_liv = V2,log2FoldChange_liv = V3)
+liv_lfc$ensembl <- as.factor(liv_lfc$ensembl)
+
+lu_lfc <- as.data.frame(cbind(rownames(ressex_lu_lf),ressex_lu_lf$padj, ressex_lu_lf$log2FoldChange))
+lu_lfc <- lu_lfc %>% rename(ensembl = V1,padj_lu = V2,log2FoldChange_lu = V3)
+lu_lfc$ensembl <- as.factor(lu_lfc$ensembl)
+
+#annos$ensembl<-annos$ensid
+
+lfc_merge1 <- merge(kid_lfc, hyp_lfc, by = "ensembl",all = TRUE)
+lfc_merge2 <- merge(lfc_merge1,gi_lfc,by = "ensembl",all = TRUE)
+lfc_merge3 <- merge(lfc_merge2,liv_lfc,by = "ensembl",all = TRUE)
+lfc_merge4 <- merge(lfc_merge3,lu_lfc,by = "ensembl",all = TRUE)
+lfc_merge <- merge(lfc_merge4,annos,by = "ensembl",all = TRUE)
+lfc_merge$ensid <- NULL
+lfc_merge$ensembl <- NULL
+lfc_merge$transcript <- NULL
+lfc_merge$Gene <- NULL
+#lfc_merge <- lfc_merge %>% distinct(gene, .keep_all = TRUE)
+#rownames(lfc_merge) <- lfc_merge$gene
+#lfc_merge$gene <- NULL
+
+
+
+data_FC <- as.data.frame(cbind(lfc_merge$gene,lfc_merge$log2FoldChange_kid,lfc_merge$log2FoldChange_hyp, lfc_merge$log2FoldChange_gi, lfc_merge$log2FoldChange_liv, lfc_merge$log2FoldChange_lu))
+
+data_FC <- data_FC %>% rename(gene = V1,kid = V2,hyp = V3,gi=V4,liv=V5, lu=V6)
+data_file <- reshape2::melt(data_FC,measure.vars = c("kid", "hyp", "gi","liv","lu"))
+
+data_Pval<- as.data.frame(cbind(lfc_merge$gene,lfc_merge$padj_kid,lfc_merge$padj_hyp, lfc_merge$padj_gi, lfc_merge$padj_liv, lfc_merge$padj_lu))
+
+data_Pval <- data_Pval %>% rename(gene = V1,kid = V2,hyp = V3,gi=V4,liv=V5, lu=V6)
+data_Pval <- reshape2::melt(data_Pval,measure.vars = c("kid", "hyp", "gi","liv","lu"))
+data_file$pval <- as.numeric(data_Pval$value)
+data_file$value <- as.numeric(data_file$value)
+
+data_file= data_file[!apply(data_file[,2:3] == 0, 1, FUN = any, na.rm = TRUE),]
+#rownames(data_file) <- NULL
+
+data_file$labels=round(data_file$value,3)
+
+theme<-theme(panel.background = element_blank(),panel.border=element_blank(),axis.line = element_line(colour = "black"),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),
+             strip.background=element_blank(),axis.text.x=element_text(colour="black",size=16),axis.text.y=element_text(colour="black",size=16),
+             axis.ticks=element_line(colour="black"),plot.margin=unit(c(1,1,1,1),"line"))
+
+
+grey= unique(subset(data_file,data_file$pval>=0.05)[c("variable", "labels","gene")])
+color= unique(subset(data_file,data_file$pval<0.05)[c("variable", "labels","gene")])
+grey$direction[grey$labels<0]="down"
+grey$direction[grey$labels>=0]="up"
+
+color$direction[color$labels<0]="down"
+color$direction[color$labels>=0]="up"
+
+cbPalette = c("darkgrey"="darkgrey","down"="#721f81","up"="#fd9668")
+
+vol_plot2 <- ggplot(data = grey, aes(x = labels, y = variable,name=gene)) +
+  geom_jitter(data = grey , aes(color = "darkgrey"),size = 1.25,height = 0.3) +
+  geom_jitter(data = color,aes(x = labels, y = variable, color=direction), size = 1.3,height = 0.3) +
+  scale_color_manual(values = cbPalette, labels = c("nonsignificant",'down','up'),name = 'direction') +
+  scale_x_continuous(breaks = pretty(data_file$value, n = 10)) +  labs(title= "", x= "\nLog2FC", y= "") + 
+  #coord_cartesian(xlim = c(-7, 5)) +
+  theme(
+    axis.title.x = element_text( size=16 ),
+    axis.title.y = element_text(size=16),
+    legend.position="none") +
+  ggtitle("male vs female, low fat diet")+
+  #geom_text_repel(aes(label = gene), hjust=0, vjust=0,size=3,parse=TRUE)+
+  theme 
+vol_plot2
+
+ggsave("vol_plot_sex_lf.png", width = 10, height = 10, dpi = 600)
+
+```
+
+res_sex_one_diet
+```{r}
+summary(ressex_kid_sd)
+summary(ressex_hyp_sd)
+summary(ressex_gi_sd)
+summary(ressex_liv_sd)
+summary(ressex_lu_sd)
+
+
+kid_lfc <- as.data.frame(cbind(rownames(ressex_kid_sd),ressex_kid_sd$padj, ressex_lu_sd$log2FoldChange))
+kid_lfc <- kid_lfc %>% rename(ensembl = V1,padj_kid = V2,log2FoldChange_kid = V3)
+kid_lfc$ensembl <- as.factor(kid_lfc$ensembl)
+
+hyp_lfc <- as.data.frame(cbind(rownames(ressex_hyp_sd),ressex_hyp_sd$padj, ressex_hyp_sd$log2FoldChange))
+hyp_lfc <- hyp_lfc %>% rename(ensembl = V1,padj_hyp = V2,log2FoldChange_hyp = V3)
+hyp_lfc$ensembl <- as.factor(hyp_lfc$ensembl)
+
+gi_lfc <- as.data.frame(cbind(rownames(ressex_gi_sd),ressex_gi_sd$padj, ressex_gi_sd$log2FoldChange))
+gi_lfc <- gi_lfc %>% rename(ensembl = V1,padj_gi = V2,log2FoldChange_gi = V3)
+gi_lfc$ensembl <- as.factor(gi_lfc$ensembl)
+
+liv_lfc <- as.data.frame(cbind(rownames(ressex_liv_sd),ressex_liv_sd$padj, ressex_liv_sd$log2FoldChange))
+liv_lfc <- liv_lfc %>% rename(ensembl = V1,padj_liv = V2,log2FoldChange_liv = V3)
+liv_lfc$ensembl <- as.factor(liv_lfc$ensembl)
+
+
+lu_lfc <- as.data.frame(cbind(rownames(ressex_lu_sd),ressex_lu_sd$padj, ressex_lu_sd$log2FoldChange))
+lu_lfc <- lu_lfc %>% rename(ensembl = V1,padj_lu = V2,log2FoldChange_lu = V3)
+lu_lfc$ensembl <- as.factor(lu_lfc$ensembl)
+
+#annos$ensembl<-annos$ensid
+
+lfc_merge1 <- merge(kid_lfc, hyp_lfc, by = "ensembl",all = TRUE)
+lfc_merge2 <- merge(lfc_merge1,gi_lfc,by = "ensembl",all = TRUE)
+lfc_merge3 <- merge(lfc_merge2,liv_lfc,by = "ensembl",all = TRUE)
+lfc_merge4 <- merge(lfc_merge3,lu_lfc,by = "ensembl",all = TRUE)
+lfc_merge <- merge(lfc_merge4,annos,by = "ensembl",all = TRUE)
+lfc_merge$ensid <- NULL
+lfc_merge$ensembl <- NULL
+lfc_merge$transcript <- NULL
+lfc_merge$Gene <- NULL
+#lfc_merge <- lfc_merge %>% distinct(gene, .keep_all = TRUE)
+#rownames(lfc_merge) <- lfc_merge$gene
+
+
+data_FC <- as.data.frame(cbind(lfc_merge$gene,lfc_merge$log2FoldChange_kid,lfc_merge$log2FoldChange_hyp, lfc_merge$log2FoldChange_gi, lfc_merge$log2FoldChange_liv, lfc_merge$log2FoldChange_lu))
+
+data_FC <- data_FC %>% rename(gene = V1,kid = V2,hyp = V3,gi=V4,liv=V5, lu=V6)
+data_file <- reshape2::melt(data_FC,measure.vars = c("kid", "hyp", "gi","liv","lu"))
+
+data_Pval<- as.data.frame(cbind(lfc_merge$gene,lfc_merge$padj_kid,lfc_merge$padj_hyp, lfc_merge$padj_gi, lfc_merge$padj_liv, lfc_merge$padj_lu))
+
+data_Pval <- data_Pval %>% rename(gene = V1,kid = V2,hyp = V3,gi=V4,liv=V5, lu=V6)
+data_Pval <- reshape2::melt(data_Pval,measure.vars = c("kid", "hyp", "gi","liv","lu"))
+data_file$pval <- as.numeric(data_Pval$value)
+data_file$value <- as.numeric(data_file$value)
+
+data_file= data_file[!apply(data_file[,2:3] == 0, 1, FUN = any, na.rm = TRUE),]
+rownames(data_file) <- NULL
+
+data_file$labels=round(data_file$value,3)
+
+theme<-theme(panel.background = element_blank(),panel.border=element_blank(),axis.line = element_line(colour = "black"),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),
+             strip.background=element_blank(),axis.text.x=element_text(colour="black",size=16),axis.text.y=element_text(colour="black",size=16),
+             axis.ticks=element_line(colour="black"),plot.margin=unit(c(1,1,1,1),"line"))
+
+
+grey= unique(subset(data_file,data_file$pval>=0.05)[c("variable", "labels","gene")])
+color= unique(subset(data_file,data_file$pval<0.05)[c("variable", "labels","gene")])
+grey$direction[grey$labels<0]="down"
+grey$direction[grey$labels>=0]="up"
+
+color$direction[color$labels<0]="down"
+color$direction[color$labels>=0]="up"
+
+cbPalette = c("darkgrey"="darkgrey","down"="#721f81","up"="#fd9668")
+
+vol_plot3 <- ggplot(data = grey, aes(x = labels, y = variable,name=gene)) +
+  geom_jitter(data = grey , aes(color = "darkgrey"),size = 1.25,height = 0.3) +
+  geom_jitter(data = color,aes(x = labels, y = variable, color=direction), size = 1.3,height = 0.3) +
+  scale_color_manual(values = cbPalette, labels = c("nonsignificant",'down','up'),name = 'direction') +
+  scale_x_continuous(breaks = pretty(data_file$value, n = 10)) +  labs(title= "", x= "\nLog2FC", y= "") + 
+  #coord_cartesian(xlim = c(-7, 5)) +
+  theme(
+    axis.title.x = element_text( size=16 ),
+    axis.title.y = element_text(size=16),
+    legend.position="none") +
+  ggtitle("male vs female, standard diet")+
+  #geom_text_repel(aes(label = gene), hjust=0, vjust=0,size=3,parse=TRUE)+
+  theme 
+vol_plot3
+ggsave("vol_plot_sex_sd.png", width = 15, height = 10, dpi = 600)
+
+vol_plot3|vol_plot2|vol_plot1
+ggsave("vol_plot_all.png", width = 20, height = 10, dpi = 400)
+
+```
+
+```{r}
+CCA_outliers=rownames(out)
+DE_lu=rownames(sig_lu_lfc)
+DE_liv=rownames(sig_liv_lfc)
+DE_gi=rownames(sig_gi_lfc)
+DE_hyp=rownames(sig_hyp_lfc)
+DE_kid=rownames(sig_kid_lfc)
+lu_wgcna=unique(combo_lu$gene)
+liv_wgcna=unique(combo_liv$gene)
+gi_wgcna=unique(combo_gi$gene)
+hyp_wgcna=unique(combo_hyp$gene)
+kid_wgcna=unique(combo_kid$gene)
+
+
+intersect_lu <- Reduce(intersect, list(CCA_outliers,DE_lu,lu_wgcna))
+intersect_liv <- Reduce(intersect, list(CCA_outliers,DE_liv,liv_wgcna))
+intersect_gi <- Reduce(intersect, list(CCA_outliers,DE_gi,gi_wgcna))
+intersect_hyp <- Reduce(intersect, list(CCA_outliers,DE_hyp,hyp_wgcna))
+intersect_kid <- Reduce(intersect, list(CCA_outliers,DE_kid,kid_wgcna))
+
+library(AnnotationDbi)
+library(org.Mm.eg.db)
+
+# 1:1 mapping symbol→entrez
+entrez_ids <- mapIds(org.Mm.eg.db, gene_symbols, 'ENTREZ', 'SYMBOL')
+
+# 1:n mapping symbol→…
+print(columns(org.Mm.eg.db))  # check what you can query
+df <- select(org.Mm.eg.db, gene_symbols, c(...), 'SYMBOL')
+
+#BiocManager::install("ComplexHeatmap")
+lu <- list(CCA_outliers=rownames(out),
+            DE_lu=rownames(sig_lu_lfc),
+            lu_wgcna=unique(combo_lu$gene))
+
+ComplexHeatmap::make_comb_mat(lu,mode = "intersect")
+
+liv <- list(CCA_outliers=rownames(out),
+            DE_liv=rownames(sig_liv_lfc),
+            liv_wgcna=unique(combo_liv$gene))
+
+ComplexHeatmap::make_comb_mat(liv,mode = "intersect")
+
+kid <- list(CCA_outliers=rownames(out),
+            DE_kid=rownames(sig_kid_lfc),
+            kid_wgcna=unique(combo_kid$gene))
+
+ComplexHeatmap::make_comb_mat(kid,mode = "intersect")
+
+gi <- list(CCA_outliers=rownames(out),
+            DE_gi=rownames(sig_gi_lfc),
+            gi_wgcna=unique(combo_gi$gene))
+
+ComplexHeatmap::make_comb_mat(gi,mode = "intersect")
+
+hyp <- list(CCA_outliers=rownames(out),
+            DE_hyp=rownames(sig_hyp_lfc),
+            hyp_wgcna=unique(combo_hyp$gene))
+
+ComplexHeatmap::make_comb_mat(hyp,mode = "intersect")
+
+intersect_lu
+intersect_liv
+intersect_gi
+intersect_hyp
+intersect_kid
+
+got_con_gi <-gost(query =intersect_gi, 
+                organism = "hsapiens", ordered_query = FALSE, 
+                multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = TRUE, 
+                user_threshold = 0.05, correction_method = "g_SCS", 
+                domain_scope = "annotated", custom_bg = NULL, 
+                numeric_ns = "", sources = "GO", highlight = TRUE)
+
+head(got_con_gi$result, 10)
+
+
+go_con_gi_res <- as.data.frame(cbind(got_con_gi$result$source,
+                                     got_con_gi$result$term_id,
+                                     got_con_gi$result$term_name,
+                                     got_con_gi$result$intersection,
+                                     got_con_gi$result$intersection_size,
+                                     got_con_gi$result$p_value
+                                     ))
+
+
+
+go_con_gi_res <- top_n(go_con_gi_res, 10, V6)
+
+liver_circle_data <- read.csv("~/Documents/UNH/rnaseq/diet_final/liver_circle_data.csv")
+lu_circle_data <- read.csv("~/Documents/UNH/rnaseq/diet_final/lu_circle_data.csv")
+hyp_circle_data <- read.csv("~/Documents/UNH/rnaseq/diet_final/hyp_circle_data.csv")
+kid_circle_data <- read.csv("~/Documents/UNH/rnaseq/diet_final/kid_circle_data.csv")
+
+list2df <- separate_rows(kid_circle_data, "gene", convert = TRUE)
+#names(list2df) <- c('category', 'ID', 'term', 'gene','count',"adj_pval")
+
+
+#restrt_gi_df <- as.data.frame(restrt_gi)
+#
+#genelist<-restrt_gi_df %>% filter(
+#  rownames(restrt_gi_df) %in% list2df$gene)
+#
+#genelist <- tibble::rownames_to_column(genelist, "gene")
+#
+#circ <- merge(list2df,genelist,by="gene") 
+#
+#circ$baseMean <- NULL
+#circ$lfcSE <- NULL
+#circ$padj <- NULL
+#circ$pvalue <- NULL
+#circ$category <- NULL
+#circ$ID <- NULL
+#circ$count <- NULL
+#circ$adj_pval <- NULL
+#circ$zscore <- NULL
+#circ$stat <- NULL
+#
+#names(circ) <- c('gene','term',"logFC")
+#col_order <- c("term", "gene", "logFC")
+#circ <- circ[, col_order]
+#
+#circ$logFC <- as.numeric(circ$logFC)
+
+
+bool_matrix <-table(list2df)
+
+dim(bool_matrix)
+
+library(circlize)
+circos.clear()
+circos.par(gap.after=c(rep(1,length(rownames(bool_matrix))-1),10,rep(1,length(colnames(bool_matrix))-1),10))
+#chordDiagram(bool_matrix)
+
+chordDiagram(bool_matrix, annotationTrack = "grid", 
+         preAllocateTracks = list(track.height = 0.3))
+
+circos.trackPlotRegion(track.index = 1, panel.fun = function(x, y) {
+xlim = get.cell.meta.data("xlim")
+ylim = get.cell.meta.data("ylim")
+sector.name = get.cell.meta.data("sector.index")
+circos.text(CELL_META$xcenter, 
+            ylim[1] + cm_h(0.5),
+            sector.name,
+            facing = "clockwise",
+            niceFacing = TRUE, 
+            adj = c(0, 0.5))
+
+
+#circos.axis(h = "bottom",labels.cex = .6,sector.index = sector.name)
+}, bg.border = NA)
+
+```
+
+
+```{r}
+immuneLu <- c("CNTN2", "NFASC", "CD1D", "ARG1", "CCL11")
+immuneliv <- c("A1BG", "C8A", "C9", "CRP", "ITIH4", "PCDHGB1", "ULBP1")
+immunehyp <- c("PTPRZ1", "RNF182", "ALPI", "EPCAM", "IGKC" )
+immunekid <- c("PIGR")
+immunegi <- c("CCL28", "IL7R")
+
+inflammationLu <- c("ITIH1", "CCL11", "PYCARD", "SCGB1A1", "SCGB3A2" )
+inflammationliv <- c("ITIH1")
+inflammationgi <- c("CAMK2B", "ASIC4", "PRKCB", "ADCY2", "ADCY8")
+
+circ <- c("GNAO1", "CAMK2B", "RYR2", "GNG3", "PRKCB", "ADCY2", "ADCY8", "CACNA1G", "GRIN1")
+
+angiogensis <- c("ANG","ADTRP","ADTRP")
+sodium <- c("SLC9A5","TNR",	"SLC38A4", "SLC17A1")
+apoptosis<- c("AATK", "FAIM2", "EMP1", "PYCARD",	"APCS",		"XKR9")
+glucose <- c("ITLN1",	"SLC2A9",		"GJB1","ADCYAP1R1","PKLR",	"PPP1R3G")
+raas <- c("AGT", "ACE2", "CMA1", "AGTR1" )
+vasso <- c("STX4", "RAB5C", "RAB11B", "CREB3L2", "AQP3", "VAMP2", "DYNLL2", "GNAS", "AVPI1")
+#"AQP2"
+gluconeogenesis <- c("CYP2E1", "PFKFB1", "PKLR","PPP1R3G", "ENO2","ADH4","ADH6","ALDOB","FBP1","PCK1","PKLR","HKDC1")
+insulin <- c("PKLR", "PPP1R3B", "HKDC1", "PCK1", "FBP1", "RIMS2", "CAMK2B", "RYR2", "SNAP25", "CREB3L3", "PRKCB", "KCNMA1", "SLC2A2", "ADCY2", "ATP1A2", "GCG", "ADCY8")
+gluconeogenesisGI <- c("ADH4", "PKLR", "HKDC1", "ALDOB", "ENO2", "PCK1", "FBP1", "ADH6")
+insulinL <- c("HNF4A", "IGFALS", "ITIH2")
+coag <- c("C8G", "CFI", "PLG", "F13B", "F5")
+dig_abs_fat_GI <- c("FABP1", "PNLIPRP2", "ABCG8", "FABP2", "ABCG5", 'PLA2G12B', "NPC1L1", "MTTP", "APOA4", "APOB","PDK1","CPT1A")
+dig_abs_carb_GI <- c("PRKCB", "HKDC1", "SLC2A2", "ATP1A2","PDHA1","SLC5A1")
+pdk_pdh <- c("PDK1", "PDHA1")
+
+datalist = list()
+
+for (i in dig_abs_carb_GI) 
+  {
+counts <- plotCounts(ddstrt, gene = i, intgroup = c("trt", "sex", "tissue"), returnData = TRUE, xlab="trt")
+counts$gene <- i
+datalist[[i]] <- rbind(counts)
+}
+
+big_data = do.call(rbind, datalist)
+
+big_data$trt <- as.factor(big_data$trt)
+big_data$sex <- as.factor(big_data$sex)
+big_data$gene <- as.factor(big_data$gene)
+big_data$tissue <- as.factor(big_data$tissue)
+big_data$count <- as.numeric(big_data$count)
+
+
+cols <- c("kid"="#cde11d","liv"="#4cc26c","lu"="#20938c", "hyp"="#6c00a8", "gi" = "#3d4d8a")
+
+coo_genes <- ggplot(big_data,  aes(x = trt, y = log10(count), fill = tissue, alpha = trt)) + 
+      #ggtitle(title)  + 
+      theme +
+      ylab("Normalized counts (Log10 transformed)") + 
+      xlab("diet") +
+      geom_violin(width=1.4) +
+      geom_boxplot(width=0.1, color="grey", alpha=0.2) +
+      facet_grid(gene~tissue , scales = "free") +
+      theme_classic() +
+      theme(panel.border = element_rect(color = "black", fill = NA, size = .5),  legend.title=element_text(size=10), legend.text=element_text(size=10),axis.text.x=element_text(colour="black",size=10),axis.text.y=element_text(colour="black",size=10))+
+      guides(alpha = FALSE)+
+      scale_fill_manual(values=cols, name = "tissue")+
+      scale_alpha_discrete(range=c(0.6, 1))
+coo_genes
+```
 

@@ -281,9 +281,16 @@ I will run some differential expression analyses now. I want to account for sex,
 Run differential expression analysis. What is the effect of sex?
 
 ```{r}
-ddssex <- DESeqDataSetFromMatrix(countData = gi_countdata,
-                                       colData = gi_samples,
-                                       design = ~ trt + sex)
+gi_samples_lf <-gi_samples %>% filter(trt == "lowfat")
+gi_countdata_lf <- dplyr::select(gi_countdata, contains("lowfat"))
+
+gi_samples_sd <-gi_samples %>% filter(trt == "standard")
+gi_countdata_sd <- dplyr::select(gi_countdata, contains("standard"))
+
+
+ddssex <- DESeqDataSetFromMatrix(countData = gi_countdata_sd,
+                                       colData = gi_samples_sd,
+                                       design = ~ sex)
 
 #filter out genes where there are less than 8 samples with normalized counts greater than or equal to 10.
 ddssex <- estimateSizeFactors(ddssex)
@@ -303,7 +310,7 @@ gi_res_trt$symbol <- mcols(gi_res_trt)$symbol
 table(ressex[,"padj"] < 0.05)
 summary(ressex)
 
-ressex_gi <-ressex
+ressex_gi_sd <-ressex
 ```
 
 best model for downstream things right now
@@ -366,7 +373,7 @@ ggplotly(pca)
 
 go trt
 ```{r}
-up_gi <- filter(as.data.frame(restrt), log2FoldChange > 0, padj < 0.05)
+up_gi <- filter(as.data.frame(restrt_gi), log2FoldChange > 0, padj < 0.05)
 gostres_gi_up <- gost(query = rownames(up_gi), 
                 organism = "hsapiens", ordered_query = FALSE, 
                 multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
@@ -375,13 +382,13 @@ gostres_gi_up <- gost(query = rownames(up_gi),
                 domain_scope = "annotated", custom_bg = NULL, 
                 numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
 
-go_gi_up <- as.data.frame(cbind(gostres_gi_up$result$term_id,gostres_gi_up$result$term_name, gostres_gi_up$result$term_size, gostres_gi_up$result$p_value))
+go_gi_up <- as.data.frame(cbind(gostres_gi_up$result$term_id,gostres_gi_up$result$term_name, gostres_gi_up$result$intersection_size, gostres_gi_up$result$p_value))
 go_gi_up$tissue <- "gi"
 go_gi_up$DE <- "up"
 go_gi_up <- dplyr::filter(go_gi_up, grepl('GO', V1))
 go_gi_up <- top_n(go_gi_up, 20, V4)
 
-down_gi <- filter(as.data.frame(restrt), log2FoldChange < 0, padj < 0.05)
+down_gi <- filter(as.data.frame(restrt_gi), log2FoldChange < 0, padj < 0.05)
 gostres_gi_down <- gost(query = rownames(down_gi), 
                 organism = "hsapiens", ordered_query = FALSE, 
                 multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
@@ -390,7 +397,7 @@ gostres_gi_down <- gost(query = rownames(down_gi),
                 domain_scope = "annotated", custom_bg = NULL, 
                 numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
 
-go_gi_down <- as.data.frame(cbind(gostres_gi_down$result$term_id,gostres_gi_down$result$term_name, gostres_gi_down$result$term_size, gostres_gi_down$result$p_value))
+go_gi_down <- as.data.frame(cbind(gostres_gi_down$result$term_id,gostres_gi_down$result$term_name, gostres_gi_down$result$intersection_size, gostres_gi_down$result$p_value))
 go_gi_down$tissue <- "gi"
 go_gi_down$DE <- "down"
 go_gi_down <- dplyr::filter(go_gi_down, grepl('GO', V1))
@@ -401,11 +408,11 @@ go_gi <- go_gi %>% reduce(full_join, by=c("V1","V2"))
 ```
 
 ```{r}
-up_gi <- filter(as.data.frame(ressex), log2FoldChange > 0, padj < 0.05)
+up_gi <- filter(as.data.frame(ressex_gi_sd), log2FoldChange > 0, padj < 0.05)
 gostres_gi_up <- gost(query = rownames(up_gi), 
                 organism = "hsapiens", ordered_query = FALSE, 
                 multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
-                measure_underrepresentation = FALSE, evcodes = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = TRUE, 
                 user_threshold = 0.05, correction_method = "g_SCS", 
                 domain_scope = "annotated", custom_bg = NULL, 
                 numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
@@ -416,7 +423,8 @@ go_gi_up$DE <- "up"
 go_gi_up <- dplyr::filter(go_gi_up, grepl('GO', V1))
 go_gi_up <- top_n(go_gi_up, 20, V4)
 
-down_gi <- filter(as.data.frame(ressex), log2FoldChange < 0, padj < 0.05)
+
+down_gi <- filter(as.data.frame(ressex_gi_sd), log2FoldChange < 0, padj < 0.05)
 gostres_gi_down <- gost(query = rownames(down_gi), 
                 organism = "hsapiens", ordered_query = FALSE, 
                 multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
@@ -432,7 +440,7 @@ go_gi_down <- dplyr::filter(go_gi_down, grepl('GO', V1))
 go_gi_down <- top_n(go_gi_down, 20, V4)
 
 go_gi <- list(go_gi_down,go_gi_up)
-write.xlsx(setNames(as.list(lapply(go_gi, data.frame)), names(go_gi)), file="go_gi_resesx.xlsx")
+write.xlsx(setNames(as.list(lapply(go_gi, data.frame)), names(go_gi)), file="go_gi_ressex_sd.xlsx")
 go_gi <- go_gi %>% reduce(full_join, by=c("V1","V2"))
 ```
 

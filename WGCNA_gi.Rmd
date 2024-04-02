@@ -77,6 +77,7 @@ gi_dds_trt <- gi_dds_trt[!rownames(gi_dds_trt) == "NULL", ]
 gi_dds_trt <- estimateSizeFactors(gi_dds_trt)
 normalized_counts <- vst(gi_dds_trt, blind = FALSE)
 gi_Expr <- assay(normalized_counts)
+expr_normalized<-assay(normalized_counts)
 ```
 ## now you have normalized read counts - yay!
 
@@ -90,7 +91,7 @@ gi_Expr <- assay(normalized_counts)
 #gi_Expr <- subset(normalized_counts, subset = rownames(normalized_counts) %in% giref)
 
 #Remove gene information and transpose the expression data
-rownames(gi_Expr)<-NULL
+#rownames(gi_Expr)<-NULL
 gi_Expr <- t(gi_Expr)
 
 ##########check included genes#########
@@ -374,18 +375,65 @@ write.xlsx(setNames(as.list(lapply(gi_list, data.frame)), names(gi_list)), file=
 
 ```
 
-unique(geneInfo0_gi$moduleColor)
-
-subset <- filter(combo, color=="darkgreen")
+```{r}
+#greenyellow, red
+subset <- filter(combo, color=="turquoise")
 phenos <- c(unique(as.character(subset$pheno)))
-subset2 <- filter(subset, pheno=="Glu")
+#subset2 <- filter(subset, pheno=="Hb.")
 
-wgcna <- subset2$gene
+wgcna <- subset$gene
 gi_dds_trt1 <- subset(gi_dds_trt, rownames(gi_dds_trt) %in% wgcna)
-restrt <- results(gi_dds_trt1, alpha = 0.01, contrast = c("trt", "yes", "no"))
+restrt <- results(gi_dds_trt1, alpha = 0.05, contrast = c("trt", "lowfat","standard"))
 pdata <- as.data.frame(restrt)
 
 p2 <- ggplot(pdata, aes(log2FoldChange, -log10(padj))) +
-  geom_point()+
-  ylim(0,0.4)
+  geom_point()
 p2
+```
+
+```{r}
+module_df <- data.frame(
+  gene_id = names(net_gi$colors),
+  colors = labels2colors(net_gi$colors)
+)
+
+
+# pick out a few modules of interest here
+modules_of_interest = c("salmon", "red", "turquoise")
+
+# Pull out list of genes in that module
+submod = module_df %>%
+  subset(colors %in% modules_of_interest)
+
+row.names(module_df) = module_df$gene_id
+
+# Get normalized expression for those genes
+expr_normalized[1:5,1:10]
+
+subexpr = expr_normalized[submod$gene_id,]
+
+submod_df = data.frame(subexpr) %>%
+  mutate(
+    gene_id = row.names(.)
+  ) %>%
+  pivot_longer(-gene_id) %>%
+  mutate(
+    module = module_df[gene_id,]$colors
+  )
+
+submod_df$trt <- unlist(lapply(strsplit(submod_df$name, split = "_"),"[[", 4))
+submod_df$sex <- unlist(lapply(strsplit(submod_df$name, split = "_"),"[[", 2))
+submod_df$both <- paste(submod_df$sex, submod_df$trt, sep="_")
+
+submod_df %>% ggplot(., aes(x=both, y=value, group=gene_id)) +
+  geom_line(aes(color = module),
+            alpha = 0.2) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 90)
+  ) +
+  facet_grid(rows = vars(module)) +
+  labs(x = "treatment",
+       y = "normalized expression")
+```
+

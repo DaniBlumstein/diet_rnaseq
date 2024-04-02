@@ -278,9 +278,15 @@ I will run some differential expression analyses now. I want to account for sex,
 Run differential expression analysis. What is the effect of sex?
 
 ```{r}
-ddssex <- DESeqDataSetFromMatrix(countData = kid_countdata,
-                                       colData = kid_samples,
-                                       design = ~ trt + sex)
+kid_samples_lf <-kid_samples %>% filter(trt == "lowfat")
+kid_countdata_lf <- dplyr::select(kid_countdata, contains("lowfat"))
+
+kid_samples_sd <-kid_samples %>% filter(trt == "standard")
+kid_countdata_sd <- dplyr::select(kid_countdata, contains("standard"))
+
+ddssex <- DESeqDataSetFromMatrix(countData = kid_countdata_sd,
+                                       colData = kid_samples_sd,
+                                       design = ~ sex)
 
 #filter out genes where there are less than 8 samples with normalized counts greater than or equal to 10.
 ddssex <- estimateSizeFactors(ddssex)
@@ -300,7 +306,7 @@ kid_res_trt$symbol <- mcols(kid_res_trt)$symbol
 table(ressex[,"padj"] < 0.05)
 summary(ressex)
 
-ressex_kid <-ressex
+ressex_kid_sd <-ressex
 ```
 
 
@@ -337,9 +343,9 @@ restrt$symbol <- mcols(restrt)$symbol
 
 # how many are "significant"?
 table(restrt[,"padj"] < 0.05)
-summary(restrt)
 
 restrt_kid <-restrt
+summary(restrt_kid)
 write.csv(restrt_kid, file="results/GOresults/kid/restrt_kid.csv")
 
 vsd <- varianceStabilizingTransformation(ddstrt, blind = FALSE)
@@ -405,7 +411,7 @@ go_kid <- go_kid %>% reduce(full_join, by=c("V1","V2"))
 
 
 ```{r}
-up_kid <- filter(as.data.frame(ressex), log2FoldChange > 0, padj < 0.05)
+up_kid <- filter(as.data.frame(ressex_kid_sd), log2FoldChange > 0, padj < 0.05)
 gostres_kid_up <- gost(query = rownames(up_kid), 
                 organism = "hsapiens", ordered_query = FALSE, 
                 multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
@@ -420,7 +426,7 @@ go_kid_up$DE <- "up"
 go_kid_up <- dplyr::filter(go_kid_up, grepl('GO', V1))
 go_kid_up <- top_n(go_kid_up, 20, V4)
 
-down_kid <- filter(as.data.frame(ressex), log2FoldChange < 0, padj < 0.05)
+down_kid <- filter(as.data.frame(ressex_kid_sd), log2FoldChange < 0, padj < 0.05)
 gostres_kid_down <- gost(query = rownames(down_kid), 
                 organism = "hsapiens", ordered_query = FALSE, 
                 multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
@@ -436,6 +442,6 @@ go_kid_down <- dplyr::filter(go_kid_down, grepl('GO', V1))
 go_kid_down <- top_n(go_kid_down, 20, V4)
 
 go_kid <- list(go_kid_down,go_kid_up)
-write.xlsx(setNames(as.list(lapply(go_kid, data.frame)), names(go_kid)), file="go_kid_ressex.xlsx")
+write.xlsx(setNames(as.list(lapply(go_kid, data.frame)), names(go_kid)), file="go_kid_ressex _sd.xlsx")
 go_kid <- go_kid %>% reduce(full_join, by=c("V1","V2"))
 ```

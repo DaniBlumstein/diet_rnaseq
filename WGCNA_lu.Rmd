@@ -340,6 +340,7 @@ combo_lu <- combo
 looping <- unique(combo$color)
 lu_list<-list()
 
+
 for (i in looping) {
 subset <- filter(combo, color==i)
 phenos <- c(unique(as.character(subset$pheno)))
@@ -375,18 +376,18 @@ write.xlsx(setNames(as.list(lapply(lu_list, data.frame)), names(lu_list)), file=
 
 ```
 
-unique(geneInfo0_lu$moduleColor)
-
-subset <- filter(combo, color=="darkgreen")
+```{r}
+subset <- filter(combo, color=="red")
 phenos <- c(unique(as.character(subset$pheno)))
-subset2 <- filter(subset, pheno=="Glu")
 
-wgcna <- subset2$gene
+wgcna <- subset$gene
 lu_dds_trt1 <- subset(lu_dds_trt, rownames(lu_dds_trt) %in% wgcna)
-restrt <- results(lu_dds_trt1, alpha = 0.01, contrast = c("trt", "yes", "no"))
+restrt <- results(lu_dds_trt1, alpha = 0.01, contrast = c("trt", "lowfat","standard"))
 pdata <- as.data.frame(restrt)
 
 p2 <- ggplot(pdata, aes(log2FoldChange, -log10(padj))) +
-  geom_point()+
-  ylim(0,0.4)
+  geom_point()
 p2
+```
+
+ACAP3,AMPD2,APH1A,BHLHE40, BHLHE41,CCN2,CDC25B,CIART,CNKSR1,CRY2,DBP,GPR146, HLF,KHDRBS1,NKAIN1,NR1D1,NR1D2,PER1, PER2,PER3,RASD1,SLC30A1,TCAP,TEF                                               

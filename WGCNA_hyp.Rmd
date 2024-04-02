@@ -376,18 +376,21 @@ write.xlsx(setNames(as.list(lapply(hyp_list, data.frame)), names(hyp_list)), fil
 
 ```
 
-unique(geneInfo0_hyp$moduleColor)
+```{r}
+#magenta,
 
-subset <- filter(combo, color=="darkgreen")
+subset <- filter(combo, color=="magenta")
 phenos <- c(unique(as.character(subset$pheno)))
 subset2 <- filter(subset, pheno=="Glu")
 
-wgcna <- subset2$gene
+wgcna <- subset$gene
 hyp_dds_trt1 <- subset(hyp_dds_trt, rownames(hyp_dds_trt) %in% wgcna)
-restrt <- results(hyp_dds_trt1, alpha = 0.01, contrast = c("trt", "yes", "no"))
+restrt <- results(hyp_dds_trt1, alpha = 0.01, contrast = c("trt", "lowfat","standard"))
 pdata <- as.data.frame(restrt)
 
 p2 <- ggplot(pdata, aes(log2FoldChange, -log10(padj))) +
   geom_point()+
   ylim(0,0.4)
 p2
+
+```

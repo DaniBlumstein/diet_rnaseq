@@ -368,18 +368,18 @@ write.xlsx(setNames(as.list(lapply(kid_list, data.frame)), names(kid_list)), fil
 
 ```
 
-unique(geneInfo0_kid$moduleColor)
-
-subset <- filter(combo, color=="darkgreen")
+```{r}
+#greenyellow, blue
+subset <- filter(combo, color=="blue")
 phenos <- c(unique(as.character(subset$pheno)))
-subset2 <- filter(subset, pheno=="Glu")
+subset2 <- filter(subset, pheno=="mean_EE")
 
 wgcna <- subset2$gene
 kid_dds_trt1 <- subset(kid_dds_trt, rownames(kid_dds_trt) %in% wgcna)
-restrt <- results(kid_dds_trt1, alpha = 0.01, contrast = c("trt", "yes", "no"))
+restrt <- results(kid_dds_trt1, alpha = 0.01, contrast = c("trt", "lowfat","standard"))
 pdata <- as.data.frame(restrt)
 
-p2 <- ggplot(pdata, aes(log2FoldChange, -log10(padj))) +
-  geom_point()+
-  ylim(0,0.4)
-p2
+p2 <- ggplot(pdata, aes(log2FoldChange, -log10(padj), names=rownames(pdata))) +
+  geom_point()
+ggplotly(p2)
+```
