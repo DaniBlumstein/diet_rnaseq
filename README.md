@@ -1,6 +1,5 @@
 # diet_rnaseq
 
-Gene expression analyses 
 This repo documents work done to analyze our gene expression analysis of cactus mice fed either a standard diet or a low fat diet. We parameterized aligning and counting RNA seq reads using STAR and htseq-count. For details on this, please see the ReadCount directory. We used a number of scripts we wrote for this purpose in the parameterization process, notably scripts to index the genome, align reads, and count expression as well as one that just aligns, and counts expression. We have additionally deposited scripts to extract mapping rates and other statistics for each sample and scripts to automate summary statistics on these mapping statistics within this directory.
 
 Following this we conducted differential expression analyses using the R package DESeq2. We have a detailed R markdown files of our differential expression analyses. In addition to doing analyses, this script produces a number of the figures in the publication. Relevant data for this script (e.g., gene counts for each sample, genome annotation documents used) are all in the data directory.
